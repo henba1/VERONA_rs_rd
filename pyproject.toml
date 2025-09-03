@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ada-verona"
-version = "1.0.0-test.2"
+version = "1.0.0-alpha.1"
 description = "Neural Network Robustness Analysis Framework"
 authors = [
     {name = "Annelot Bosman", email = "a.w.bosman@liacs.leidenuniv.nl"},
