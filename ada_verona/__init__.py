@@ -5,7 +5,7 @@ A comprehensive framework for analyzing neural network robustness
 through verification and adversarial testing.
 """
 
-__version__ = "1.0.0-alpha.2"
+__version__ = "1.0.0-alpha.3"
 __author__ = "ADA Research Group"
 
 # Import main components for easy access
