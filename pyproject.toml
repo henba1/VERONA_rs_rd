@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ada-verona"
-version = "1.0.0-alpha.8"
+version = "1.0.0-alpha.10"
 description = "Neural Network Robustness Analysis Framework"
 authors = [
     {name = "Annelot Bosman", email = "a.w.bosman@liacs.leidenuniv.nl"},
