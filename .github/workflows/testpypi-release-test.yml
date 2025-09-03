@@ -25,7 +25,7 @@ jobs:
 
       - name: Build package for test distribution
         run: |
-          python -m pip install build setuptools wheel
+          python -m pip install build setuptools==75.6.0 wheel
           # Clean any previous builds
           rm -rf dist/ build/ *.egg-info/
           python -m build
@@ -83,10 +83,11 @@ jobs:
           path: dist/
 
       - name: Publish to GitHub Packages
+      
         # GitHub Packages for Python uses the GitHub API endpoint
         # The package will be available at: https://github.com/henba1/VERONA/packages
         run: |
-          python -m pip install twine
+          python -m pip install twine==6.0.1
           twine upload --repository-url https://api.github.com/repos/henba1/VERONA/packages/pypi dist/*
         env:
           TWINE_USERNAME: ${{ github.actor }}

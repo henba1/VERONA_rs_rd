@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ada-verona"
-version = "1.0.0-alpha.7"
+version = "1.0.0-alpha.8"
 description = "Neural Network Robustness Analysis Framework"
 authors = [
     {name = "Annelot Bosman", email = "a.w.bosman@liacs.leidenuniv.nl"},
@@ -15,7 +15,7 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license-expression = "Apache-2.0"
 keywords = ["neural networks", "robustness", "verification", "adversarial", "adversarial robustness", "adversarial attacks", "AI safety"]
 classifiers = [
     "Development Status :: 3 - Alpha",
