@@ -15,7 +15,7 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-license-expression = "Apache-2.0"
+license = {file = "LICENSE"}
 keywords = ["neural networks", "robustness", "verification", "adversarial", "adversarial robustness", "adversarial attacks", "AI safety"]
 classifiers = [
     "Development Status :: 3 - Alpha",
