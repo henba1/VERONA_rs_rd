@@ -26,6 +26,8 @@ jobs:
       - name: Build package for test distribution
         run: |
           python -m pip install build
+          # Clean any previous builds
+          rm -rf dist/ build/ *.egg-info/
           python -m build
       - name: Upload distributions
         uses: actions/upload-artifact@v4
