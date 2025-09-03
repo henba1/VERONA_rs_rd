@@ -81,12 +81,12 @@ jobs:
           path: dist/
 
       - name: Publish to GitHub Packages
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          # GitHub Packages registry with organization
-          repository-url: https://npm.pkg.github.com/henba1/
+        # GitHub Packages for Python uses the GitHub API endpoint
+        # The package will be available at: https://github.com/henba1/VERONA/packages
+        run: |
+          python -m pip install twine
+          twine upload --repository-url https://api.github.com/repos/henba1/VERONA/packages/pypi dist/*
         env:
-          # Use GitHub token for authentication
           TWINE_USERNAME: ${{ github.actor }}
-          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.PACKAGES_TOKEN }}
+          TWINE_REPOSITORY_URL: https://api.github.com/repos/henba1/VERONA/packages/pypi
