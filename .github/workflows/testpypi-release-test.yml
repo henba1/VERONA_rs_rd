@@ -25,7 +25,7 @@ jobs:
 
       - name: Build package for test distribution
         run: |
-          python -m pip install build
+          python -m pip install build setuptools wheel
           # Clean any previous builds
           rm -rf dist/ build/ *.egg-info/
           python -m build

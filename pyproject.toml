@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ada-verona"
@@ -221,6 +221,8 @@ dev = [
     "mypy>=0.991",
     "build>=0.10.0",
     "twine>=4.0.0",
+    "setuptools>=61.0",
+    "wheel>=0.37.0",
 ]
 
 [project.urls]
@@ -232,15 +234,12 @@ Issues = "https://github.com/ADA-research/VERONA/issues"
 [project.scripts]
 ada-verona = "ada_verona.cli:main"
 
-[tool.hatch.build.targets.wheel]
+[tool.setuptools]
 packages = ["ada_verona"]
-include = ["ada_verona/**/*"]
+include-package-data = true
 
-[tool.hatch.version]
-path = "ada_verona/__init__.py"
-
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.setuptools.package-data]
+ada_verona = ["**/*"]
 
 [tool.pytest.ini_options]
 pythonpath = [
