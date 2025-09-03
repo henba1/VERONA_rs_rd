@@ -31,7 +31,7 @@ jobs:
       - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:
-          name: release-dists
+          name: release-dists 
           path: dist/
 
   pypi-publish:
@@ -39,7 +39,7 @@ jobs:
     needs:
       - release-build
     # Only run if the build job ran (i.e., test release)
-    if: contains(github.event.release.tag_name, 'testpypi-release')
+    if: contains(github.event.release.tag_name, 'test')
     permissions:
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
