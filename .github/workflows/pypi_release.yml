@@ -6,7 +6,8 @@ on:
       - 'v*'  # Triggers on tags like v1.0.0, v1.0.0-alpha.10
 
 jobs:
-  publish:
+  pypi:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
     environment:
       name: test-release   # change this to github environment name
@@ -28,4 +29,4 @@ jobs:
         run: uv build
 
       - name: Publish
-        run: uv publish --publish-url https://test.pypi.org/project/ada-verona/  #  # the publish url can be removed for production release
+        run: uv publish --publish-url https://test.pypi.org/legacy/  # the publish url can be removed for production release
