@@ -15,6 +15,7 @@ class VerificationResult(str, Enum):
     TIMEOUT = "TIMEOUT"
     ERROR = "ERR"
 
+
 """Classes for data about verification."""
 
 
@@ -40,6 +41,5 @@ class CompleteVerificationData:
     err: str = ""
     stdout: str = ""
 
-CompleteVerificationResult = Result[
-    CompleteVerificationData, CompleteVerificationData
-]
+
+CompleteVerificationResult = Result[CompleteVerificationData, CompleteVerificationData]

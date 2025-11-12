@@ -42,7 +42,7 @@ class PyTorchNetwork(Network):
             str: The name of the network.
         """
         return self._name
-    
+
     @property
     def path(self) -> Path:
         """
@@ -52,7 +52,7 @@ class PyTorchNetwork(Network):
             Path: The path of the network.
         """
         return None
-    
+
     def get_input_shape(self) -> np.ndarray:
         """
         Get the input shape of the PyTorch model.
@@ -74,14 +74,13 @@ class PyTorchNetwork(Network):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             model = self.model.to(device)
             model.eval()
-            
+
             self.torch_model_wrapper = TorchModelWrapper(model, self.get_input_shape())
-        
+
         return self.torch_model_wrapper
-    
 
     def to_dict(self):
         raise NotImplementedError("PytorchNetwork does not support to_dict() function currently.")
-    
+
     def from_dict(cls, data: dict):
-         raise NotImplementedError("PytorchNetwork does not support from_dict() function currently.")
+        raise NotImplementedError("PytorchNetwork does not support from_dict() function currently.")

@@ -34,6 +34,10 @@ class EpsilonStatus:
         Returns:
             dict: The dictionary representation of the EpsilonStatus.
         """
-        return dict(epsilon_value=self.value, result=self.result, time=self.time, verifier=self.verifier, 
-                    obtained_labels=self.obtained_labels.flatten().tolist() if self.obtained_labels is not None 
-                    else None)
+        return dict(
+            epsilon_value=self.value,
+            result=self.result,
+            time=self.time,
+            verifier=self.verifier,
+            obtained_labels=self.obtained_labels.flatten().tolist() if self.obtained_labels is not None else None,
+        )

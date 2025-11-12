@@ -60,9 +60,7 @@ def get_balanced_sample(
     }
 
     if dataset_name not in dataset_config:
-        raise ValueError(
-            f"Unsupported dataset: {dataset_name}. " f"Supported datasets: {', '.join(dataset_config.keys())}"
-        )
+        raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
 
     config = dataset_config[dataset_name]
     target_size = image_size if image_size is not None else config["default_size"]
@@ -161,4 +159,3 @@ def create_distribution(
 
     experiment_repository.save_plots()
     logging.info(f"Failed for networks: {failed_networks}")
-

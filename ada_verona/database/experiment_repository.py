@@ -18,6 +18,7 @@ DEFAULT_RESULT_CSV_NAME = "result_df.csv"
 PER_EPSILON_RESULT_CSV_NAME = "per_epsilon_results.csv"
 DEFAULT_NETWORKS_CSV_NAME = "networks.csv"
 
+
 class ExperimentRepository:
     """
     Database to handle all the paths to the different files used.
@@ -86,7 +87,7 @@ class ExperimentRepository:
         if os.path.exists(self.get_results_path()):
             raise Exception(
                 "Error, there is already a directory with results with the same name,"
-                "make sure no results will be overwritten"  
+                "make sure no results will be overwritten"
             )
         else:
             os.makedirs(self.get_results_path())
@@ -125,7 +126,7 @@ class ExperimentRepository:
             network_path_list = [file for file in self.network_folder.iterdir()]
             network_list = [ONNXNetwork(x) for x in network_path_list]
         return network_list
-        
+
     def save_results(self, results: list[EpsilonValueResult]) -> None:
         """
         Save the list of epsilon value results to a CSV file.
@@ -276,7 +277,7 @@ class ExperimentRepository:
         """
         Delete the temporary folder of the active experiment.
         """
-        
+
         tmp_path = self.get_tmp_path()
         if tmp_path.exists():
             for file in tmp_path.iterdir():

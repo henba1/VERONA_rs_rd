@@ -21,13 +21,16 @@ from ada_verona.verification_module.property_generator.one2one_property_generato
 def property_generator(request):
     return request.param
 
+
 @pytest.fixture
 def tmp_path():
     return Path("/tmp")
 
+
 @pytest.fixture
 def verification_context(network, datapoint, tmp_path, property_generator):
     return VerificationContext(network, datapoint, tmp_path, property_generator)
+
 
 @pytest.fixture
 def auto_verify_module_fixture(request, auto_verify_module, auto_verify_module_config):
@@ -36,6 +39,7 @@ def auto_verify_module_fixture(request, auto_verify_module, auto_verify_module_c
     elif request.param == "auto_verify_module_config":
         return auto_verify_module_config
 
+
 def test_auto_verify_module_initialization(auto_verify_module, verifier):
     assert auto_verify_module.verifier == verifier
     assert auto_verify_module.timeout == 60
@@ -43,21 +47,19 @@ def test_auto_verify_module_initialization(auto_verify_module, verifier):
 
 
 @pytest.mark.parametrize(
-    "auto_verify_module_fixture", 
-    ["auto_verify_module", "auto_verify_module_config"], 
-    indirect=True
+    "auto_verify_module_fixture", ["auto_verify_module", "auto_verify_module_config"], indirect=True
 )
 def test_auto_verify_module_verify(auto_verify_module_fixture, verification_context):
     result = auto_verify_module_fixture.verify(verification_context, 0.6)
 
     assert isinstance(result, CompleteVerificationData)
     assert result.result == "SAT"
-    
+
     result = auto_verify_module_fixture.verify(verification_context, 0.01)
 
     assert isinstance(result, CompleteVerificationData)
     assert result.result == "UNSAT"
-   
+
 
 def test_parse_counter_example(result, verification_context):
     counter_example = parse_counter_example(result, verification_context)

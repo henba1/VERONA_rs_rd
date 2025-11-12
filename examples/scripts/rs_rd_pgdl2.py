@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from experiment_utils import create_distribution, get_balanced_sample
+from rs_rd_research_code.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 import ada_verona.util.logger as logger
 from ada_verona import (
@@ -15,8 +17,6 @@ from ada_verona import (
     PredictionsBasedSampler,
     PytorchExperimentDataset,
 )
-from experiment_utils import create_distribution, get_balanced_sample
-from rs_rd_research_code.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 # Set up logging using the custom logger
 logger.setup_logging(level=logging.INFO)
@@ -33,8 +33,8 @@ def main():
 
     experiment_name = f"pgd_l2_{dataset_name}_{split}_nsample_{sample_size}_{sample_correct_predictions}"
 
-    DATASET_DIR = get_dataset_dir(dataset_name) 
-    MODELS_DIR = get_models_dir(dataset_name) 
+    DATASET_DIR = get_dataset_dir(dataset_name)
+    MODELS_DIR = get_models_dir(dataset_name)
     RESULTS_DIR = get_results_dir()
 
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
@@ -70,7 +70,8 @@ def main():
     dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=sample_correct_predictions)
 
     # ----------------------------------------VERIFICATION CONFIGURATION---------------------------------------------
-    property_generator = One2AnyPropertyGenerator()  # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO  adjust for ImageNet
+    # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO adjust for ImageNet
+    property_generator = One2AnyPropertyGenerator()
     robustness_attack_estimator = AttackEstimationModule(attack=PGDAttack(number_iterations=40, norm="l2"))
 
     # ----------------------------------------EPSILON VALUE SEARCH CONFIGURATION-------------------------------------

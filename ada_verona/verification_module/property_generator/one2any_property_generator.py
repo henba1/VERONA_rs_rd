@@ -6,7 +6,7 @@ from ada_verona.verification_module.property_generator.property_generator import
 
 class One2AnyPropertyGenerator(PropertyGenerator):
     """One2AnyPropertyGenerator generates properties for untargeted verification of neural networks.
-    This means the property is violated if we can find any class other than the target class 
+    This means the property is violated if we can find any class other than the target class
     that has a higher output value.
     """
 
@@ -60,7 +60,7 @@ class One2AnyPropertyGenerator(PropertyGenerator):
             result += f"(assert (>= X_{i} {x_lb[i]:.8f}))\n"
 
         result += "\n; Definition of output constraints\n"
-    
+
         result += "(assert (or\n"
         for i in range(self.number_classes):
             if i == image_class:
@@ -95,8 +95,7 @@ class One2AnyPropertyGenerator(PropertyGenerator):
             type=self.__class__.__name__,
             module=self.__class__.__module__,
         )
-    
-    
+
     @classmethod
     def from_dict(cls, data: dict):
         """

@@ -1,5 +1,5 @@
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 from torch.nn.modules import Module
 
 from ada_verona.verification_module.attacks.attack import Attack
@@ -101,7 +101,7 @@ class CWL2Attack(Attack):
         w = w.detach().clone().requires_grad_(True)
 
         # Binary search for optimal constant c
-        for binary_step in range(self.binary_search_steps):
+        for _binary_step in range(self.binary_search_steps):
             # Optimizer for this binary search iteration
             optimizer = torch.optim.Adam([w], lr=self.learning_rate)
 
@@ -134,10 +134,7 @@ class CWL2Attack(Attack):
                 with torch.no_grad():
                     # Check which examples are successful adversarial examples
                     pred_labels = outputs.argmax(dim=1)
-                    if self.targeted:
-                        successful = pred_labels == target
-                    else:
-                        successful = pred_labels != target
+                    successful = pred_labels == target if self.targeted else pred_labels != target
 
                     # Update step best results
                     improved = (l2_dist < step_best_l2) & successful
@@ -154,9 +151,8 @@ class CWL2Attack(Attack):
                             best_adv_images[i] = adv_images[i].clone()
 
                 # Early stopping if attack is successful and abort_early is True
-                if self.abort_early and iteration % 10 == 0:
-                    if successful.all():
-                        break
+                if self.abort_early and iteration % 10 == 0 and successful.all():
+                    break
 
             # Update binary search bounds
             with torch.no_grad():
@@ -235,4 +231,3 @@ class CWL2Attack(Attack):
         # Clamp to avoid numerical issues at boundaries
         x = torch.clamp(x, 1e-6, 1 - 1e-6)
         return torch.atanh(2 * x - 1)
-

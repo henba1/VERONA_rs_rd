@@ -70,4 +70,3 @@ for network in network_list:
         epsilon_value_result = epsilon_value_estimator.compute_epsilon_value(verification_context)
 
         file_database.save_result(epsilon_value_result)
-
