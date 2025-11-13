@@ -35,15 +35,17 @@ def main():
 
     sample_correct_predictions = True
 
-    experiment_name = f"pgd_l2_{dataset_name}_{split}_nsample_{sample_size}_{sample_correct_predictions}"
+    experiment_type = "verona_upper_bounding"
+    experiment_name = "pgd_l2"
 
     DATASET_DIR = get_dataset_dir(dataset_name)
-    MODELS_DIR = get_models_dir(dataset_name)
+    MODELS_DIR = get_models_dir(dataset_name) / experiment_type
     RESULTS_DIR = get_results_dir()
 
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
     experiment_repository_path = (
-        Path(RESULTS_DIR) / f"{dataset_name}" / f"verona_rs_rd_{experiment_name}_{dataset_name}_{sample_size}"
+        Path(RESULTS_DIR)
+        / f"verona_rs_rd_{experiment_name}_{dataset_name}_{sample_size}_sample_correct_{sample_correct_predictions}"
     )
     os.makedirs(experiment_repository_path, exist_ok=True)
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
@@ -58,7 +60,8 @@ def main():
 
     # ----------------------------------------SAVE ORIGINAL DATASET INDICES----------------------------------------
     indices_file = (
-        experiment_repository_path / f"original_{dataset_name}_indices_{split}_nsample_{sample_size}_{timestamp}.txt"
+        experiment_repository.get_act_experiment_path()
+        / f"original_{dataset_name}_indices_{split}_nsample_{sample_size}_{timestamp}.txt"
     )
 
     np.savetxt(
