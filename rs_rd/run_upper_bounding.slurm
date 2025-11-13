@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=upper_bounding
-#SBATCH --partition=rome
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=56G
+#SBATCH --partition=staging
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
 #SBATCH --time=7:00:00
-#SBATCH --output=/home/jvrijn/code/rs/VERONA/runs/slurm_outputs/upper_bounding_%j.out
-#SBATCH --error=/home/jvrijn/code/rs/VERONA/runs/slurm_outputs/upper_bounding_%j.err
+#SBATCH --output=/home/jvrijn/code/rs/rs_rd_research/runs/slurm_outputs/upper_bounding_%j.out
+#SBATCH --error=/home/jvrijn/code/rs/rs_rd_research/runs/slurm_outputs/upper_bounding_%j.err
 
 echo "Job ID: $SLURM_JOB_ID"
 echo "Job Name: $SLURM_JOB_NAME"
