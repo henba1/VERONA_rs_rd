@@ -194,8 +194,7 @@ class ExperimentRepository:
         result_df_path = self.get_results_path() / DEFAULT_RESULT_CSV_NAME
         if result_df_path.exists():
             df = pd.read_csv(result_df_path, index_col=0)
-            df["network"] = df.network_path.str.split("/").apply(lambda x: x[-1]).apply(lambda x: x.split(".")[0])
-
+            # df["network"] = df.network_path.str.split("/").apply(lambda x: x[-1]).apply(lambda x: x.split(".")[0])
             return df
         else:
             raise Exception(f"Error, no result file found at {result_df_path}")

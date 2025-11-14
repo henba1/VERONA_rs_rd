@@ -36,7 +36,7 @@ def main():
     # ---------------------------------------Basic Experiment Settings -----------------------------------------
     dataset_name = "CIFAR-10"
     split = "test"
-    sample_size = 500
+    sample_size = 200
     random_seed = 42
     sample_correct_predictions = True
 
