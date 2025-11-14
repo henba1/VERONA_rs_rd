@@ -10,7 +10,7 @@ import numpy as np
 # experiment utils
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from comet_tracker import CometTracker, log_classifier_metrics, log_verona_experiment_summary, log_verona_results
-from experiment_utils import compute_classifier_metrics, create_distribution, get_balanced_sample
+from experiment_utils import compute_classifier_metrics, create_distribution, get_balanced_sample, add_original_indices_to_result_df
 from rs_rd_research.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 import ada_verona.util.logger as logger
@@ -174,10 +174,20 @@ def main():
 
     # ----------------------------------------CREATE ROBUSTNESS DISTRIBUTION------------------------------------------
     create_distribution(experiment_repository, dataset, dataset_sampler, epsilon_value_estimator, property_generator)
-
+    results_path = experiment_repository.get_results_path()
+  
+    # Log result files
+    log_verona_results(comet_tracker, results_path)
+    
+    result_with_idx = add_original_indices_to_result_df(results_path, original_indices)    # this only works for one network, need to take from PredictionBasedSampler as in case of sample_correct_predictions=True, the indices are not sequential, the idx might differ from one network to the next depending on the classification of the network
+    if result_with_idx:
+        logging.info(f"Created enhanced result file: {result_with_idx}")
+        comet_tracker.log_asset(result_with_idx)
+    else:
+        logging.warning("Could not add original indices to result_df")
+    
     # ----------------------------------------LOG RESULTS TO COMET ML---------------------------------------------
     experiment_path = experiment_repository.get_act_experiment_path()
-    results_path = experiment_repository.get_results_path()
 
     # Log experiment summary
     log_verona_experiment_summary(
@@ -202,9 +212,6 @@ def main():
             "list": epsilon_list,
         },
     )
-
-    # Log result files
-    log_verona_results(comet_tracker, results_path)
 
     # Log final metrics
     comet_tracker.log_metrics({"total_duration_seconds": time.time() - start_time})

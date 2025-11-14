@@ -16,7 +16,7 @@ echo "Working Directory: $(pwd)"
 echo "Loaded modules:"
 module list 2>&1
 
-cd /home/jvrijn/code/rs/VERONA
+cd /home/jvrijn/code/rs/VERONA_rs_rd 
 
 source /gpfs/home2/jvrijn/miniforge3/etc/profile.d/conda.sh
 conda activate verona_jair

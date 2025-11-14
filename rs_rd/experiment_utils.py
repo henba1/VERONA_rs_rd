@@ -174,6 +174,51 @@ def find_config(network_identifier, config_dict):
     return None
 
 
+def add_original_indices_to_result_df(results_path, original_indices):
+    """
+    Add original dataset indices column to result_df.csv.
+
+    Creates a new CSV file with an additional 'original_dataset_index' column
+    that maps from image_id (subset index) to the original dataset index.
+
+    Args:
+        results_path: Path to the results directory containing result_df.csv
+        original_indices: Array/list mapping subset index to original dataset index
+
+    Returns:
+        Path to the new result file, or None if result_df.csv doesn't exist
+    """
+    import pandas as pd
+
+    result_csv_path = results_path / "result_df.csv"
+
+    if not result_csv_path.exists():
+        logging.warning(f"result_df.csv not found at {result_csv_path}")
+        return None
+
+    # Read the result dataframe
+    df = pd.read_csv(result_csv_path)
+    logging.info(f"Loaded result_df with {len(df)} rows")
+
+    # Create mapping from subset index (image_id) to original index
+    idx_mapping = {i: int(original_indices[i]) for i in range(len(original_indices))}
+
+    # Add original_dataset_index column
+    if "image_id" in df.columns:
+        df["original_dataset_index"] = df["image_id"].map(idx_mapping)
+        logging.info("Added 'original_dataset_index' column to result_df")
+    else:
+        logging.warning("Column 'image_id' not found in result_df")
+        return None
+
+    # Save with new name
+    output_path = results_path / "result_df_with_original_idx.csv"
+    df.to_csv(output_path, index=False)
+    logging.info(f"Saved result_df with original indices to: {output_path}")
+
+    return output_path
+
+
 def create_distribution(
     experiment_repository: ExperimentRepository,
     dataset: ExperimentDataset,
