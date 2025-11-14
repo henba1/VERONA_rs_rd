@@ -5,12 +5,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import comet_ml
 import numpy as np
 
 # experiment utils
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from experiment_utils import create_distribution, get_balanced_sample
+from comet_tracker import CometTracker, log_classifier_metrics, log_verona_experiment_summary, log_verona_results
+from experiment_utils import compute_classifier_metrics, create_distribution, get_balanced_sample
 from rs_rd_research.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 import ada_verona.util.logger as logger
@@ -46,36 +46,15 @@ def main():
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
     epsilon_stop = 0.4
-    epsilon_step = 0.0039
+    epsilon_step = 0.0039 # why ~1/8 of 8/255 epsilon step size?
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
     MODELS_DIR = get_models_dir(dataset_name) / experiment_type
     RESULTS_DIR = get_results_dir()
 
-    # --------- -----------------------------COMET initialization ------------------------------------------------
-    try:
-        comet_ml.login()
-        logging.info("Comet ML login successful")
-    except Exception as e:
-        logging.warning(f"Comet ML login failed: {e}")
-
-    # Create experiment config with descriptive name
-    experiment_config = comet_ml.ExperimentConfig(
-        name=f"rs_rd_pgd_l2_CIFAR-10_{timestamp}",
-        tags=["rs-rd", f"{experiment_type}", f"{dataset_name}", f"{experiment_name}"],
-    )
-
-    try:
-        experiment = comet_ml.start(
-            project_name="rs-rd",
-            experiment_config=experiment_config,
-        )
-        logging.info(f"Comet ML experiment created: {experiment.url}")
-    except Exception as e:
-        logging.warning(f"Failed to create Comet ML experiment: {e}")
-        logging.info("Continuing without Comet ML tracking...")
-        experiment = None
-
+    # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
+    comet_tracker = CometTracker(project_name="rs-rd", auto_login=True)
+    
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
     experiment_repository_path = (
         Path(RESULTS_DIR)
@@ -83,32 +62,37 @@ def main():
     )
     os.makedirs(experiment_repository_path, exist_ok=True)
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
+    
+    network_list = experiment_repository.get_network_list()
+    model_names = [network.name for network in network_list]
+    
+    epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
+    #Comet experiment start
+    comet_tracker.start_experiment(
+        experiment_name=f"rs_rd_pgd_l2_CIFAR-10_{timestamp}",
+        tags=[experiment_type, dataset_name, experiment_name, epsilon_tag, *model_names],
+    )
     experiment_repository.initialize_new_experiment(experiment_name)
 
     # Log experiment parameters to Comet ML
-    if experiment:
-        try:
-            experiment.log_parameters(
-                {
-                    "dataset_name": dataset_name,
-                    "split": split,
-                    "sample_size": sample_size,
-                    "sample_correct_predictions": sample_correct_predictions,
-                    "experiment_type": experiment_type,
-                    "experiment_name": experiment_name,
-                    "attack_type": "PGD",
-                    "attack_norm": "l2",
-                    "attack_iterations": 40,
-                    "epsilon_start": epsilon_start,
-                    "epsilon_stop": epsilon_stop,
-                    "epsilon_step": epsilon_step,
-                    "sampling_method": "StratifiedShuffleSplit",
-                    "random_seed_dataset_sampling": random_seed,
-                }
-            )
-            logging.info("Experiment parameters logged to Comet ML")
-        except Exception as e:
-            logging.warning(f"Failed to log parameters to Comet ML: {e}")
+    comet_tracker.log_parameters(
+        {
+            "dataset_name": dataset_name,
+            "split": split,
+            "sample_size": sample_size,
+            "sample_correct_predictions": sample_correct_predictions,
+            "experiment_type": experiment_type,
+            "experiment_name": experiment_name,
+            "attack_type": "PGD",
+            "attack_norm": "l2",
+            "attack_iterations": 40,   #TODO make this dynamic
+            "epsilon_start": epsilon_start,
+            "epsilon_stop": epsilon_stop,
+            "epsilon_step": epsilon_step,
+            "sampling_method": "StratifiedShuffleSplit",
+            "random_seed_dataset_sampling": random_seed,
+        }
+    )
 
     # ----------------------------------------DATASET CONFIGURATION-----------------------------------------------
     # load dataset and get original CIFAR-10 indices
@@ -133,12 +117,7 @@ def main():
     logging.info(f"Saved original {dataset_name} indices to {indices_file}")
 
     # Log indices file to Comet ML
-    if experiment:
-        try:
-            experiment.log_asset(str(indices_file))
-            logging.info(f"Indices file logged to Comet ML: {indices_file}")
-        except Exception as e:
-            logging.warning(f"Failed to log indices file to Comet ML: {e}")
+    comet_tracker.log_asset(indices_file)
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
@@ -149,6 +128,39 @@ def main():
     # ----------------------------------------DATASET SAMPLER CONFIGURATION------------------------------------------
     # only sample correct predictions
     dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=sample_correct_predictions)
+
+    # ----------------------------------------CLASSIFIER PERFORMANCE METRICS-----------------------------------------
+    # Compute and log classifier metrics for each network before running robustness verification
+    logging.info(f"Computing classifier metrics for {len(network_list)} network(s)")
+
+    for network in network_list:
+        try:
+            # Compute metrics on full dataset (before sampling)
+            metrics = compute_classifier_metrics(network, dataset)
+
+            # Log metrics to Comet ML
+            log_classifier_metrics(comet_tracker, network.name, metrics)
+
+            # Log detailed predictions to file
+            predictions_file = (
+                experiment_repository.get_act_experiment_path() / f"{network.name}_predictions_{timestamp}.txt"
+            )
+            with open(predictions_file, "w") as f:
+                f.write(f"Network: {network.name}\n")
+                f.write(f"Accuracy: {metrics['accuracy']:.2f}%\n")
+                f.write(f"Correct: {metrics['correct']}/{metrics['total']}\n\n")
+                f.write("Sample_ID,True_Label,Predicted_Label,Correct\n")
+                for i, (true_label, pred_label) in enumerate(zip(metrics["labels"], metrics["predictions"])):
+                    is_correct = "Yes" if true_label == pred_label else "No"
+                    f.write(f"{i},{true_label},{pred_label},{is_correct}\n")
+
+            logging.info(f"Saved metrics to {predictions_file}")
+
+            # Log predictions file to Comet ML
+            comet_tracker.log_asset(predictions_file)
+
+        except Exception as e:
+            logging.error(f"Failed to compute metrics for network {network.name}: {e}")
 
     # ----------------------------------------VERIFICATION CONFIGURATION---------------------------------------------
     # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO adjust for ImageNet
@@ -167,75 +179,38 @@ def main():
     experiment_path = experiment_repository.get_act_experiment_path()
     results_path = experiment_repository.get_results_path()
 
-    if experiment:
-        try:
-            # Log experiment metadata
-            experiment.log_other(
-                "experiment_summary",
-                {
-                    "dataset_name": dataset_name,
-                    "split": split,
-                    "sample_size": sample_size,
-                    "sample_correct_predictions": sample_correct_predictions,
-                    "experiment_repository_path": str(experiment_repository_path),
-                    "experiment_path": str(experiment_path),
-                    "results_path": str(results_path),
-                    "attack_type": "PGD (L2)",
-                    "attack_iterations": 40,
-                    "epsilon_range": f"{epsilon_start} to {epsilon_stop} (step {epsilon_step})",
-                    "total_epsilon_values": len(epsilon_list),
-                },
-            )
-            logging.info("Experiment summary logged to Comet ML")
-        except Exception as e:
-            logging.warning(f"Failed to log experiment summary to Comet ML: {e}")
+    # Log experiment summary
+    log_verona_experiment_summary(
+        comet_tracker,
+        experiment_repository_path=experiment_repository_path,
+        experiment_path=experiment_path,
+        results_path=results_path,
+        dataset_info={
+            "name": dataset_name,
+            "split": split,
+            "sample_size": sample_size,
+            "sample_correct_predictions": sample_correct_predictions,
+        },
+        attack_info={
+            "type": f"{experiment_name}",
+            "iterations": 40,
+        },
+        epsilon_info={
+            "start": epsilon_start,
+            "stop": epsilon_stop,
+            "step": epsilon_step,
+            "list": epsilon_list,
+        },
+    )
 
-        try:
-            # Log result dataframe if it exists
-            result_csv = results_path / "result_df.csv"
-            if result_csv.exists():
-                experiment.log_asset(str(result_csv))
-                logging.info(f"Result CSV logged to Comet ML: {result_csv}")
-        except Exception as e:
-            logging.warning(f"Failed to log result CSV to Comet ML: {e}")
+    # Log result files
+    log_verona_results(comet_tracker, results_path)
 
-        try:
-            # Log per-epsilon results if they exist
-            per_epsilon_csv = results_path / "per_epsilon_results.csv"
-            if per_epsilon_csv.exists():
-                experiment.log_asset(str(per_epsilon_csv))
-                logging.info(f"Per-epsilon CSV logged to Comet ML: {per_epsilon_csv}")
-        except Exception as e:
-            logging.warning(f"Failed to log per-epsilon CSV to Comet ML: {e}")
+    # Log final metrics
+    comet_tracker.log_metrics({"total_duration_seconds": time.time() - start_time})
 
-        try:
-            # Log configuration if it exists
-            config_file = experiment_path / "configuration.json"
-            if config_file.exists():
-                experiment.log_asset(str(config_file))
-                logging.info(f"Configuration file logged to Comet ML: {config_file}")
-        except Exception as e:
-            logging.warning(f"Failed to log configuration to Comet ML: {e}")
-
-        # Log final metrics
-        try:
-            experiment.log_metrics(
-                {
-                    "total_duration_seconds": time.time() - start_time,
-                }
-            )
-            logging.info("Final metrics logged to Comet ML")
-        except Exception as e:
-            logging.warning(f"Failed to log final metrics to Comet ML: {e}")
-
-        # End the experiment
-        try:
-            experiment.end()
-            logging.info(f"Experiment completed. View results at: {experiment.url}")
-        except Exception as e:
-            logging.warning(f"Failed to end Comet ML experiment: {e}")
-    else:
-        logging.info("Experiment completed (Comet ML tracking was not available)")
+    # End the experiment
+    comet_tracker.end_experiment()
 
 
 if __name__ == "__main__":

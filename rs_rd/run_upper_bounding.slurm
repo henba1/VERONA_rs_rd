@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=7:00:00
-#SBATCH --output=/home/jvrijn/code/rs/rs_rd_research/runs/slurm_outputs/upper_bounding_%j.out
-#SBATCH --error=/home/jvrijn/code/rs/rs_rd_research/runs/slurm_outputs/upper_bounding_%j.err
+#SBATCH --output=/projects/prjs1681/runs/slurm_outputs/upper_bounding_%j.out
+#SBATCH --error=/projects/prjs1681/runs/slurm_outputs/upper_bounding_%j.err
 
 echo "Job ID: $SLURM_JOB_ID"
 echo "Job Name: $SLURM_JOB_NAME"
