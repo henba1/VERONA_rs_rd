@@ -103,7 +103,6 @@ def main():
         dataset_dir=DATASET_DIR,
         seed=random_seed,
     )
-    # Use original indices as IDs so they're preserved through sampling
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset)
     dataset._indices = list(original_indices)
 
