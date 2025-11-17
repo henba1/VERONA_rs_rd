@@ -21,6 +21,7 @@ from ada_verona import (
     One2AnyPropertyGenerator,
     PGDAttack,
     PredictionsBasedSampler,
+    IdentitySampler,
     PytorchExperimentDataset,
 )
 
@@ -36,10 +37,13 @@ def main():
     # ---------------------------------------Basic Experiment Settings -----------------------------------------
     dataset_name = "CIFAR-10"
     split = "test"
-    sample_size = 200
+    sample_size = 10
     random_seed = 42
-    sample_correct_predictions = True
 
+    use_identity_sampler = True  
+    sample_correct_predictions = False
+    
+    
     experiment_type = "verona_upper_bounding"
     experiment_name = "pgd_l2"
 
@@ -103,8 +107,8 @@ def main():
         dataset_dir=DATASET_DIR,
         seed=random_seed,
     )
-    dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset)
-    dataset._indices = list(original_indices)
+    # Pass original_indices to maintain mapping to original dataset
+    dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
 
     # ----------------------------------------SAVE ORIGINAL DATASET INDICES----------------------------------------
     indices_file = (
@@ -127,17 +131,21 @@ def main():
     epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
 
     # ----------------------------------------DATASET SAMPLER CONFIGURATION------------------------------------------
-    # only sample correct predictions
-    dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=sample_correct_predictions)
-
+    #If want full dataset, use IdentitySampler
+   
+    if  use_identity_sampler:
+        dataset_sampler = IdentitySampler()
+    else:
+        dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=sample_correct_predictions)
     # ----------------------------------------CLASSIFIER PERFORMANCE METRICS-----------------------------------------
     # Compute and log classifier metrics for each network before running robustness verification
+    # TODO: currently not the most efficient, as we do inference twice 
     logging.info(f"Computing classifier metrics for {len(network_list)} network(s)")
 
     for network in network_list:
         try:
-            # Compute metrics on full dataset (before sampling)
-            metrics = compute_classifier_metrics(network, dataset)
+            # Compute metrics on full dataset (before sampling) #TODO: kinda pointless for PredictionsBasedSampler
+            metrics = dataset_sampler.compute_metrics(network, dataset)
 
             # Log metrics to Comet ML
             log_classifier_metrics(comet_tracker, network.name, metrics)

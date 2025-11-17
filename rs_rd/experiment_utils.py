@@ -98,65 +98,6 @@ def get_balanced_sample(
 
     return balanced_dataset, balanced_sample_idx
 
-
-def compute_classifier_metrics(network: Network, dataset: ExperimentDataset):
-    """
-    Compute classifier performance metrics on a dataset.
-
-    Args:
-        network: VERONA Network object
-        dataset: ExperimentDataset (e.g., PytorchExperimentDataset)
-
-    Returns:
-        dict: Dictionary with the following metrics:
-            - accuracy: Percentage of correct predictions
-            - correct: Number of correctly classified samples
-            - total: Total number of samples
-            - predictions: List of predicted labels
-            - labels: List of true labels
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = network.load_pytorch_model().to(device)
-    model.eval()
-
-    correct = 0
-    total = 0
-    predictions = []
-    labels = []
-
-    logging.info(f"Computing classifier metrics for network: {network.name}")
-
-    for data_point in dataset:
-        data = data_point.data.reshape(network.get_input_shape())
-        data = data.to(device)
-
-        with torch.no_grad():
-            output = model(data)
-
-        _, predicted = torch.max(output, 1)
-        pred_label = predicted.cpu().item()
-        true_label = data_point.label
-
-        predictions.append(pred_label)
-        labels.append(true_label)
-
-        if pred_label == true_label:
-            correct += 1
-        total += 1
-
-    accuracy = 100 * correct / total if total > 0 else 0
-
-    logging.info(f"Accuracy: {accuracy:.2f}% ({correct}/{total})")
-
-    return {
-        "accuracy": accuracy,
-        "correct": correct,
-        "total": total,
-        "predictions": predictions,
-        "labels": labels,
-    }
-
-
 def find_config(network_identifier, config_dict):
     """
     Find configuration path for a given network identifier.
