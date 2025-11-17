@@ -9,15 +9,19 @@ class PytorchExperimentDataset:
     A dataset class for wrapping a PyTorch dataset for experiments.
     """
 
-    def __init__(self, dataset: Dataset) -> None:
+    def __init__(self, dataset: Dataset, original_indices: list[int] | None = None) -> None:
         """
         Initialize the PytorchExperimentDataset with a PyTorch dataset.
 
         Args:
             dataset (Dataset): The PyTorch dataset to wrap.
+            original_indices (list[int] | None): Optional list mapping local indices to original dataset indices.
+                If None, uses sequential indices [0, 1, 2, ...].
         """
         self.dataset = dataset
         self._indices = [x for x in range(0, len(dataset))]
+        # Store mapping from local index to original dataset index
+        self._original_indices = original_indices if original_indices is not None else list(self._indices)
 
     def __len__(self) -> int:
         """
@@ -39,10 +43,12 @@ class PytorchExperimentDataset:
             DataPoint: The data point at the specified index.
         """
         index = self._indices[idx]
+        # Use original index as the DataPoint ID
+        original_index = self._original_indices[index]
 
         data, label = self.dataset[index]
 
-        return DataPoint(index, label, data)
+        return DataPoint(original_index, label, data)
 
     def get_subset(self, indices: list[int]) -> Self:
         """
@@ -51,13 +57,19 @@ class PytorchExperimentDataset:
 
         Args:
             indices (list[int]): The list of indices to get the subset for.
+                These should be original dataset indices.
 
         Returns:
             Self: The subset of the dataset.
         """
-        new_instance = PytorchExperimentDataset(self.dataset)
+        new_instance = PytorchExperimentDataset(self.dataset, original_indices=self._original_indices)
 
-        new_instance._indices = indices
+        # Map original indices back to local indices
+        # Create a reverse mapping: original_index -> local_index
+        original_to_local = {orig: local for local, orig in enumerate(self._original_indices)}
+
+        # Convert provided original indices to local indices
+        new_instance._indices = [original_to_local[orig_idx] for orig_idx in indices if orig_idx in original_to_local]
 
         return new_instance
 
