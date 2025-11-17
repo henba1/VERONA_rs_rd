@@ -28,9 +28,7 @@ class IdentitySampler(DatasetSampler):
         """
         return dataset
 
-    def compute_metrics(
-        self, network: Network, dataset: ExperimentDataset
-    ) -> dict[str, Any]:
+    def compute_metrics(self, network: Network, dataset: ExperimentDataset) -> dict[str, Any]:
         """Compute classifier performance metrics on the dataset.
 
         Args:
@@ -57,6 +55,7 @@ class IdentitySampler(DatasetSampler):
         logging.info(f"Computing classifier metrics for network: {network.name}")
 
         for data_point in dataset:
+            # Reshape data to network input shape
             data = data_point.data.reshape(network.get_input_shape())
             data = data.to(device)
 
@@ -85,4 +84,3 @@ class IdentitySampler(DatasetSampler):
             "predictions": predictions,
             "labels": labels,
         }
-

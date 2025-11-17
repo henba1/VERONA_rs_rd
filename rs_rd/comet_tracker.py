@@ -338,25 +338,21 @@ def log_verona_results(
 
     # Log result dataframe
     result_csv = results_path / "result_df.csv"
-    if result_csv.exists():
-        if tracker.log_asset(result_csv):
-            logging.info(f"Result CSV logged to Comet ML: {result_csv}")
-            success_count += 1
+    if result_csv.exists() and tracker.log_asset(result_csv):
+        logging.info(f"Result CSV logged to Comet ML: {result_csv}")
+        success_count += 1
 
     # Log per-epsilon results
     per_epsilon_csv = results_path / "per_epsilon_results.csv"
-    if per_epsilon_csv.exists():
-        if tracker.log_asset(per_epsilon_csv):
-            logging.info(f"Per-epsilon CSV logged to Comet ML: {per_epsilon_csv}")
-            success_count += 1
+    if per_epsilon_csv.exists() and tracker.log_asset(per_epsilon_csv):
+        logging.info(f"Per-epsilon CSV logged to Comet ML: {per_epsilon_csv}")
+        success_count += 1
 
     # Log configuration
     experiment_path = results_path.parent
     config_file = experiment_path / "configuration.json"
-    if config_file.exists():
-        if tracker.log_asset(config_file):
-            logging.info(f"Configuration file logged to Comet ML: {config_file}")
-            success_count += 1
+    if config_file.exists() and tracker.log_asset(config_file):
+        logging.info(f"Configuration file logged to Comet ML: {config_file}")
+        success_count += 1
 
     return success_count > 0
-

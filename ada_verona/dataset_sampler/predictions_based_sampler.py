@@ -62,9 +62,7 @@ class PredictionsBasedSampler(DatasetSampler):
 
         return dataset.get_subset(selected_indices)
 
-    def compute_metrics(
-        self, network: Network, dataset: ExperimentDataset
-    ) -> dict[str, Any]:
+    def compute_metrics(self, network: Network, dataset: ExperimentDataset) -> dict[str, Any]:
         """Compute classifier performance metrics on the dataset.
 
         Args:
@@ -91,7 +89,7 @@ class PredictionsBasedSampler(DatasetSampler):
         logging.info(f"Computing classifier metrics for network: {network.name}")
 
         for data_point in dataset:
-            data = data_point.data.reshape(network.get_input_shape())
+            data = data_point.data.reshape(network.get_input_shape())  # Reshape data to network input shape
             data = data.to(device)
 
             with torch.no_grad():

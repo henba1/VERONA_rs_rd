@@ -27,8 +27,8 @@ from .database.vnnlib_property import VNNLibProperty
 
 # Dataset sampler classes
 from .dataset_sampler.dataset_sampler import DatasetSampler
-from .dataset_sampler.predictions_based_sampler import PredictionsBasedSampler
 from .dataset_sampler.identity_sampler import IdentitySampler
+from .dataset_sampler.predictions_based_sampler import PredictionsBasedSampler
 
 # Epsilon value estimator classes
 from .epsilon_value_estimator.binary_search_epsilon_value_estimator import (

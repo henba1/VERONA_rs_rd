@@ -10,7 +10,7 @@ import numpy as np
 # experiment utils
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from comet_tracker import CometTracker, log_classifier_metrics, log_verona_experiment_summary, log_verona_results
-from experiment_utils import compute_classifier_metrics, create_distribution, get_balanced_sample
+from experiment_utils import create_distribution, get_balanced_sample, get_sample
 from rs_rd_research.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 import ada_verona.util.logger as logger
@@ -18,10 +18,10 @@ from ada_verona import (
     AttackEstimationModule,
     BinarySearchEpsilonValueEstimator,
     ExperimentRepository,
+    IdentitySampler,
     One2AnyPropertyGenerator,
     PGDAttack,
     PredictionsBasedSampler,
-    IdentitySampler,
     PytorchExperimentDataset,
 )
 
@@ -39,18 +39,18 @@ def main():
     split = "test"
     sample_size = 10
     random_seed = 42
+    # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
+    use_identity_sampler = False
+    sample_correct_predictions = True
+    sample_stratified = False
 
-    use_identity_sampler = True  
-    sample_correct_predictions = False
-    
-    
     experiment_type = "verona_upper_bounding"
     experiment_name = "pgd_l2"
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
     epsilon_stop = 0.4
-    epsilon_step = 0.0039 # why ~1/8 of 8/255 epsilon step size?
+    epsilon_step = 0.0039  # why ~1/8 of 8/255 epsilon step size?
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
     MODELS_DIR = get_models_dir(dataset_name) / experiment_type
@@ -58,20 +58,23 @@ def main():
 
     # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
     comet_tracker = CometTracker(project_name="rs-rd", auto_login=True)
-    
+
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
-    experiment_repository_path = (
-        Path(RESULTS_DIR)
-        / f"verona_rs_rd_{experiment_name}_{dataset_name}_{sample_size}_sample_correct_{sample_correct_predictions}"
+    experiment_dir_name = (
+        f"verona_rs_rd_{experiment_name}_{dataset_name}_{sample_size}_"
+        f"sample_correct_{sample_correct_predictions}_"
+        f"sample_stratified_{sample_stratified}"
     )
+    experiment_repository_path = Path(RESULTS_DIR) / experiment_dir_name
     os.makedirs(experiment_repository_path, exist_ok=True)
+    # networks are loaded from this object
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
-    
+
     network_list = experiment_repository.get_network_list()
     model_names = [network.name for network in network_list]
-    
+
     epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
-    #Comet experiment start
+    # Comet experiment start
     comet_tracker.start_experiment(
         experiment_name=f"rs_rd_pgd_l2_CIFAR-10_{timestamp}",
         tags=[experiment_type, dataset_name, experiment_name, epsilon_tag, *model_names],
@@ -89,7 +92,7 @@ def main():
             "experiment_name": experiment_name,
             "attack_type": "PGD",
             "attack_norm": "l2",
-            "attack_iterations": 40,   #TODO make this dynamic
+            "attack_iterations": 40,  # TODO make this dynamic
             "epsilon_start": epsilon_start,
             "epsilon_stop": epsilon_stop,
             "epsilon_step": epsilon_step,
@@ -100,13 +103,22 @@ def main():
 
     # ----------------------------------------DATASET CONFIGURATION-----------------------------------------------
     # load dataset and get original CIFAR-10 indices
-    cifar10_torch_dataset, original_indices = get_balanced_sample(
-        dataset_name=dataset_name,
-        train_bool=(split == "train"),
-        dataset_size=sample_size,
-        dataset_dir=DATASET_DIR,
-        seed=random_seed,
-    )
+    if sample_stratified:
+        cifar10_torch_dataset, original_indices = get_balanced_sample(
+            dataset_name=dataset_name,
+            train_bool=(split == "train"),
+            dataset_size=sample_size,
+            dataset_dir=DATASET_DIR,
+            seed=random_seed,
+        )
+    else:
+        cifar10_torch_dataset, original_indices = get_sample(
+            dataset_name=dataset_name,
+            train_bool=(split == "train"),
+            dataset_size=sample_size,
+            dataset_dir=DATASET_DIR,
+            seed=random_seed,
+        )
     # Pass original_indices to maintain mapping to original dataset
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
 
@@ -131,15 +143,13 @@ def main():
     epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
 
     # ----------------------------------------DATASET SAMPLER CONFIGURATION------------------------------------------
-    #If want full dataset, use IdentitySampler
-   
-    if  use_identity_sampler:
+    if use_identity_sampler:
         dataset_sampler = IdentitySampler()
     else:
         dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=sample_correct_predictions)
     # ----------------------------------------CLASSIFIER PERFORMANCE METRICS-----------------------------------------
     # Compute and log classifier metrics for each network before running robustness verification
-    # TODO: currently not the most efficient, as we do inference twice 
+    # TODO: currently not the most efficient, as we do inference twice
     logging.info(f"Computing classifier metrics for {len(network_list)} network(s)")
 
     for network in network_list:
@@ -159,7 +169,8 @@ def main():
                 f.write(f"Accuracy: {metrics['accuracy']:.2f}%\n")
                 f.write(f"Correct: {metrics['correct']}/{metrics['total']}\n\n")
                 f.write("Sample_ID,True_Label,Predicted_Label,Correct\n")
-                for i, (true_label, pred_label) in enumerate(zip(metrics["labels"], metrics["predictions"])):
+                zipped_preds = zip(metrics["labels"], metrics["predictions"], strict=True)
+                for i, (true_label, pred_label) in enumerate(zipped_preds):
                     is_correct = "Yes" if true_label == pred_label else "No"
                     f.write(f"{i},{true_label},{pred_label},{is_correct}\n")
 
@@ -184,11 +195,11 @@ def main():
     # ----------------------------------------CREATE ROBUSTNESS DISTRIBUTION------------------------------------------
     create_distribution(experiment_repository, dataset, dataset_sampler, epsilon_value_estimator, property_generator)
     results_path = experiment_repository.get_results_path()
-  
+
     # Log result files (image_id column now contains original CIFAR-10 indices)
     log_verona_results(comet_tracker, results_path)
     logging.info("Result files contain original dataset indices in the image_id column")
-    
+
     # ----------------------------------------LOG RESULTS TO COMET ML---------------------------------------------
     experiment_path = experiment_repository.get_act_experiment_path()
 

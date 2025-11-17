@@ -19,9 +19,25 @@ from ada_verona import (
     EpsilonValueEstimator,
     ExperimentDataset,
     ExperimentRepository,
-    Network,
     PropertyGenerator,
 )
+
+
+def get_dataset_config():
+    """
+    Get dataset configuration mapping.
+
+    Returns:
+        dict: Dictionary mapping dataset names to their configuration including:
+            - class: PyTorch dataset class
+            - default_size: Default image dimensions (width, height)
+            - channels: Number of color channels
+    """
+    return {
+        "CIFAR-10": {"class": datasets.CIFAR10, "default_size": (32, 32), "channels": 3},
+        "MNIST": {"class": datasets.MNIST, "default_size": (28, 28), "channels": 1},
+        "ImageNet": {"class": datasets.ImageNet, "default_size": (224, 224), "channels": 3},
+    }
 
 
 def get_balanced_sample(
@@ -53,12 +69,7 @@ def get_balanced_sample(
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    # Dataset configuration mapping
-    dataset_config = {
-        "CIFAR-10": {"class": datasets.CIFAR10, "default_size": (32, 32), "channels": 3},
-        "MNIST": {"class": datasets.MNIST, "default_size": (28, 28), "channels": 1},
-        "ImageNet": {"class": datasets.ImageNet, "default_size": (224, 224), "channels": 3},
-    }
+    dataset_config = get_dataset_config()
 
     if dataset_name not in dataset_config:
         raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
@@ -97,6 +108,65 @@ def get_balanced_sample(
     balanced_dataset = Subset(torch_dataset, balanced_sample_idx)
 
     return balanced_dataset, balanced_sample_idx
+
+
+def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None):
+    """
+    Get a random sample from a PyTorch dataset without stratification.
+
+    Supports CIFAR-10, MNIST, and ImageNet datasets with simple random sampling.
+    Unlike get_balanced_sample(), this function does not ensure balanced class distribution.
+
+    Args:
+        dataset_name: Name of the dataset. Options: "CIFAR-10", "MNIST", "ImageNet"
+        train_bool: If True, sample from training set; if False, from test set
+        dataset_size: Number of samples to select
+        dataset_dir: Directory where dataset is stored
+        seed: Random seed for reproducibility
+        image_size: Target image size (width, height). If None, uses dataset defaults:
+                   MNIST: (28, 28), CIFAR-10: (32, 32), ImageNet: (224, 224)
+
+    Returns:
+        tuple: (sampled_dataset, sample_idx)
+            - sampled_dataset: PyTorch Subset with randomly sampled samples
+            - sample_idx: Indices of selected samples
+
+    Raises:
+        ValueError: If dataset_name is not supported
+    """
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    dataset_config = get_dataset_config()
+
+    if dataset_name not in dataset_config:
+        raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
+
+    config = dataset_config[dataset_name]
+    target_size = image_size if image_size is not None else config["default_size"]
+
+    # Create transforms
+    data_transforms = transforms.Compose([transforms.Resize(target_size), transforms.ToTensor(), torch.flatten])
+
+    dataset_class = config["class"]
+
+    # Load the appropriate split
+    torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+
+    # Random sampling without stratification
+    dataset_length = len(torch_dataset)
+    if dataset_size > dataset_length:
+        raise ValueError(f"Requested sample size {dataset_size} exceeds dataset size {dataset_length}")
+
+    # Generate random indices
+    all_indices = np.arange(dataset_length)
+    sample_idx = np.random.choice(all_indices, size=dataset_size, replace=False)
+
+    # Create subset of original dataset using the sampled indices
+    sampled_dataset = Subset(torch_dataset, sample_idx)
+
+    return sampled_dataset, sample_idx
+
 
 def find_config(network_identifier, config_dict):
     """
