@@ -53,11 +53,16 @@ class AutoVerifyModule(VerificationModule):
 
         if self.config:
             result = self.verifier.verify_property(
-                verification_context.network.path, vnnlib_property.path, timeout=self.timeout, config=self.config
+                verification_context.network.path,
+                vnnlib_property.path,
+                timeout=self.timeout,
+                config=self.config,
             )
         else:
             result = self.verifier.verify_property(
-                verification_context.network.path, vnnlib_property.path, timeout=self.timeout
+                verification_context.network.path,
+                vnnlib_property.path,
+                timeout=self.timeout,
             )
 
         if isinstance(result, Ok):
