@@ -2,38 +2,31 @@ import logging
 import os
 import sys
 import time
-import shutil
-
 from datetime import datetime
-
 from pathlib import Path
 
 import numpy as np
 
-# experiment utils
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from autoverify.verifier import SDPCrown
 from comet_tracker import CometTracker, log_classifier_metrics, log_verona_experiment_summary, log_verona_results
 from experiment_utils import create_distribution, get_balanced_sample, get_sample
-
-
+from rs_rd_research.paths import get_dataset_dir, get_models_dir, get_results_dir
 
 import ada_verona.util.logger as logger
 from ada_verona import (
+    AutoVerifyModule,
     BinarySearchEpsilonValueEstimator,
     ExperimentRepository,
     IdentitySampler,
     One2AnyPropertyGenerator,
     PredictionsBasedSampler,
     PytorchExperimentDataset,
-    AutoVerifyModule
 )
-
-from autoverify.verifier import SDPCrown
-
-from paths import get_dataset_dir, get_models_dir, get_results_dir
 
 # Set up logging using the custom logger
 logger.setup_logging(level=logging.INFO)
+
 
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -54,13 +47,13 @@ def main():
     experiment_name = "sdp_crown_test"
 
     # ----------------------------------------VERIFIER CONFIGURATION------------------------------------------
-    config_path = "/home/wk560263/Master-Thesis/rs/verif/VERONA_rs_rd/rs_rd/config/SDP_CROWN_av_example_config.yaml"
+    config_path = Path(__file__).parent / "config" / "SDP_CROWN_av_example_config.yaml"
     timeout = 300
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
     epsilon_stop = 0.6
-    epsilon_step = 0.025 
+    epsilon_step = 0.025
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
     MODELS_DIR = get_models_dir(dataset_name) / experiment_type
@@ -78,10 +71,7 @@ def main():
     experiment_repository_path = Path(RESULTS_DIR) / experiment_dir_name
     os.makedirs(experiment_repository_path, exist_ok=True)
     # networks are loaded from this object
-    experiment_repository = ExperimentRepository(base_path=experiment_repository_path, 
-                                                 network_folder=MODELS_DIR
-                                                 )
-
+    experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
     network_list = experiment_repository.get_network_list()
     model_names = [network.name for network in network_list]
@@ -89,7 +79,7 @@ def main():
     epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
     # Comet experiment start
     comet_tracker.start_experiment(
-        experiment_name=f"rs_rd_pgd_l2_CIFAR-10_{timestamp}",
+        experiment_name=f"rs_rd_{experiment_type}_{dataset_name}_{timestamp}",
         tags=[experiment_type, dataset_name, experiment_name, epsilon_tag, *model_names],
     )
     experiment_repository.initialize_new_experiment(experiment_name)
@@ -132,9 +122,7 @@ def main():
             seed=random_seed,
         )
     # Pass original_indices to maintain mapping to original dataset
-    dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, 
-                                       original_indices=original_indices.tolist()
-                                       )
+    dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
 
     # ----------------------------------------SAVE ORIGINAL DATASET INDICES----------------------------------------
     indices_file = (
@@ -199,11 +187,7 @@ def main():
     # ----------------------------------------VERIFICATION CONFIGURATION---------------------------------------------
     # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO adjust for ImageNet
     property_generator = One2AnyPropertyGenerator()
-    robustness_attack_estimator = AutoVerifyModule(
-        verifier=SDPCrown(),
-        timeout=timeout,
-        config=Path(config_path)
-    )
+    robustness_attack_estimator = AutoVerifyModule(verifier=SDPCrown(), timeout=timeout, config=Path(config_path))
 
     # ----------------------------------------EPSILON VALUE SEARCH CONFIGURATION-------------------------------------
     epsilon_value_estimator = BinarySearchEpsilonValueEstimator(
@@ -211,12 +195,7 @@ def main():
     )
 
     # ----------------------------------------CREATE ROBUSTNESS DISTRIBUTION------------------------------------------
-    create_distribution(experiment_repository, 
-    dataset, 
-    dataset_sampler, 
-    epsilon_value_estimator, 
-    property_generator
-    )
+    create_distribution(experiment_repository, dataset, dataset_sampler, epsilon_value_estimator, property_generator)
     results_path = experiment_repository.get_results_path()
 
     # Log result files (image_id column now contains original CIFAR-10 indices)
