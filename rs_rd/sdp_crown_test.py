@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from autoverify.verifier import SDPCrown
@@ -23,9 +24,15 @@ from ada_verona import (
     PredictionsBasedSampler,
     PytorchExperimentDataset,
 )
+from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNetwork
 
 # Set up logging using the custom logger
 logger.setup_logging(level=logging.INFO)
+
+
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("dulwich").setLevel(logging.WARNING)
+logging.getLogger("comet_ml").setLevel(logging.INFO)
 
 
 def main():
@@ -35,6 +42,7 @@ def main():
 
     # ---------------------------------------Basic Experiment Settings -----------------------------------------
     dataset_name = "CIFAR-10"
+    input_shape = (1, 3, 32, 32)
     split = "test"
     sample_size = 10
     random_seed = 42
@@ -47,13 +55,14 @@ def main():
     experiment_name = "sdp_crown_test"
 
     # ----------------------------------------VERIFIER CONFIGURATION------------------------------------------
-    config_path = Path(__file__).parent / "config" / "SDP_CROWN_av_example_config.yaml"
+    config_path = Path(__file__).parent / "config" / "SDP-crown-conf.yaml"
     timeout = 300
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.6
-    epsilon_step = 0.025
+    epsilon_stop = 0.1
+    epsilon_step = 8 / 255
+    epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
     MODELS_DIR = get_models_dir(dataset_name) / experiment_type
@@ -73,7 +82,23 @@ def main():
     # networks are loaded from this object
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
-    network_list = experiment_repository.get_network_list()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    network_list = []
+    for model_path in MODELS_DIR.glob("*.pth"):
+        loaded = torch.load(model_path, map_location=device, weights_only=False)
+        model = loaded.to(device)
+        model.eval()
+
+        network_list.append(
+            PyTorchNetwork(
+                model=model,
+                input_shape=input_shape,
+                name=model_path.stem,
+                path=model_path,
+            )
+        )
+
     model_names = [network.name for network in network_list]
 
     epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
@@ -138,12 +163,6 @@ def main():
     # Log indices file to Comet ML
     comet_tracker.log_asset(indices_file)
 
-    # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
-    epsilon_start = 0.00
-    epsilon_stop = 0.4
-    epsilon_step = 0.0039
-    epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
-
     # ----------------------------------------DATASET SAMPLER CONFIGURATION------------------------------------------
     if use_identity_sampler:
         dataset_sampler = IdentitySampler()
@@ -195,7 +214,14 @@ def main():
     )
 
     # ----------------------------------------CREATE ROBUSTNESS DISTRIBUTION------------------------------------------
-    create_distribution(experiment_repository, dataset, dataset_sampler, epsilon_value_estimator, property_generator)
+    create_distribution(
+        experiment_repository,
+        dataset,
+        dataset_sampler,
+        epsilon_value_estimator,
+        property_generator,
+        network_list=network_list,
+    )
     results_path = experiment_repository.get_results_path()
 
     # Log result files (image_id column now contains original CIFAR-10 indices)

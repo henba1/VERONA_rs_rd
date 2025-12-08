@@ -237,6 +237,7 @@ def create_distribution(
     epsilon_value_estimator: EpsilonValueEstimator,
     property_generator: PropertyGenerator,
     config=None,
+    network_list=None,
 ):
     """
     Create robustness distribution for all networks in the experiment repository.
@@ -251,8 +252,11 @@ def create_distribution(
         epsilon_value_estimator: Estimator for computing epsilon values
         property_generator: Generator for creating verification properties
         config: Optional configuration dictionary for network-specific settings
+        network_list: Optional explicit list of networks to verify. If None,
+            networks are loaded from the experiment repository.
     """
-    network_list = experiment_repository.get_network_list()
+    if network_list is None:
+        network_list = experiment_repository.get_network_list()
     failed_networks = []
     for network in network_list:
         if config is not None:

@@ -18,7 +18,7 @@ class PyTorchNetwork(Network):
         input_shape (tuple[int]): Input shape of the model.
     """
 
-    def __init__(self, model: torch.nn.Module, input_shape: tuple[int], name: str) -> None:
+    def __init__(self, model: torch.nn.Module, input_shape: tuple[int], name: str, path: Path | None = None) -> None:
         """
         Initialize the PyTorchNetwork with architecture and weights paths.
 
@@ -31,6 +31,7 @@ class PyTorchNetwork(Network):
         self.model = model
         self.input_shape = input_shape
         self._name = name
+        self._path = path
         self.torch_model_wrapper = None
 
     @property
@@ -51,7 +52,7 @@ class PyTorchNetwork(Network):
         Returns:
             Path: The path of the network.
         """
-        return None
+        return self._path
 
     def get_input_shape(self) -> np.ndarray:
         """
