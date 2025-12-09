@@ -2,35 +2,52 @@
 
 This page contains essential information for developers contributing to or maintaining the ada-verona package.
 
-## Development Environment Setup
+### Local installation for e.g. development purposes
 
-Install the package with all development dependencies using:
+If you want to install ada-verona locally using git:
 
 ```bash
-uv sync --dev
+git clone https://github.com/ADA-research/VERONA.git
+cd VERONA
+uv pip install -e .
+uv pip install -e .[dev]  # to include development dependencies
 ```
-
-This command:
-- Installs ada-verona and all dependencies
-- Ensures consistency with the `uv.lock` file
-- Includes all dev dependencies specified in the dependency groups in `pyproject.toml`
-
-You can use this in your preferred virtual environment setup (conda, venv, etc.).
 
 ## Pre-Commit Hooks
 
 We use [pre-commit](https://pre-commit.com/) to automatically enforce code quality standards and consistency before commits. 
 
-### Installation
-
-If you haven't already installed pre-commit, do so using:
+Pre-commit is included in the dev dependencies. After installing the dev environment, set up the git hooks:
 
 ```bash
-uv pip install pre-commit
 pre-commit install
 ```
 
 This command hooks into your Git workflow and runs configured checks on staged files before each commit.
+
+### Skipping Specific Hooks
+
+To skip a specific hook for a single commit, use the `SKIP` environment variable, e.g.:
+
+```bash
+SKIP=check-pyproject-requirements-sync git commit -m "Your message"
+```
+
+## Opening a PR
+Before opening a PR, please do the following steps:
+
+- Check you implementation and all the files you changed for the PR
+- Execute the tests ```python -m pytest --cov tests/ --verbose``` and check everything is passing
+- Create a new branch and upload you changes to GitHub
+- Open your PR, check that all workflows are passing and document your changes by describing:
+    - What is the purpose of the PR and what issue is addressed.
+    - What exactly was changed in this PR. 
+    - How did you test the changes.
+- After you documented the PR and checked that the workflows are passing assign a reviewer to the PR
+
+
+## Testing the documentation
+- Check the documentation locally using ```mkdocs serve```
 
 ## Package Release Steps
 

@@ -1,5 +1,6 @@
 [![codecov](https://codecov.io/gh/ADA-research/VERONA/graph/badge.svg?token=O0J6S4TSF2)](https://codecov.io/gh/ADA-research/VERONA)
 [![PyPI](https://img.shields.io/pypi/v/ada-verona)](https://pypi.org/project/ada-verona/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ADA-research/VERONA/blob/main/LICENSE)
 [![Lint](https://github.com/ADA-research/VERONA/actions/workflows/lint.yml/badge.svg)](https://github.com/ADA-research/VERONA/actions/workflows/lint.yml)
 [![Release to PyPI](https://github.com/ADA-research/VERONA/actions/workflows/pypi_release.yml/badge.svg)](https://github.com/ADA-research/VERONA/actions/workflows/pypi_release.yml)
 [![Documentation](https://github.com/ADA-research/VERONA/actions/workflows/docs.yml/badge.svg)](https://github.com/ADA-research/VERONA/actions/workflows/docs.yml)
@@ -7,7 +8,7 @@
 # VERification Of Neural Architectures (VERONA)
 
 <p align="center">
-  <img src="./assets/MNIST_anneplot_convMedGRELU_test_combined.svg" alt="Anneplot of robusntess distributions of one convolutional architecture with three different training methods created with \alpha,\beta-CROWN." height="400" style="vertical-align: top;"/>
+  <img src="https://raw.githubusercontent.com/ADA-research/VERONA/main/assets/MNIST_anneplot_convMedGRELU_test_combined.svg" alt="Anneplot of robusntess distributions of one convolutional architecture with three different training methods created with \alpha,\beta-CROWN." height="400"/>
 </p>
 
 VERONA simplifies your experiment pipeline for performing local robustness verification on your networks and datasets. 
@@ -65,12 +66,13 @@ If you want to install ada-verona locally using git for, e.g., development purpo
 ```bash
 git clone https://github.com/ADA-research/VERONA.git
 cd VERONA
-uv pip install --system -e .
-uv pip install --system -e .[dev] #for development dependencies
+uv pip install -e .
+uv pip install -e .[dev]  # to include development dependencies
 ```
+
 ### Optional: AutoAttack Installation
 
-To use the AutoAttack adversarial attack wrapper ([`AutoAttackWrapper`](./ada_verona/verification_module/attacks/auto_attack_wrapper.py)), you need to install AutoAttack separately from its GitHub repository:
+To use the AutoAttack adversarial attack wrapper ([`AutoAttackWrapper`](./ada_verona/verification_module/attacks/auto_attack_wrapper.py)), you need to install AutoAttack from its GitHub repository:
 
 ```bash
 uv pip install git+https://github.com/fra31/auto-attack
@@ -80,7 +82,7 @@ This package provides ensemble-based adversarial attacks for robustness evaluati
 
 ### Optional: AutoVerify Installation
 
-To use the auto-verify verifiers, you need to install auto-verify separately:
+To use the auto-verify verifiers, you need to additionally install auto-verify:
 
 **Note:** On macOS (and sometimes on Linux), you may need to install `swig` first with `conda install -c conda-forge swig`.
 
@@ -135,7 +137,11 @@ This package makes use of the following tools and libraries:
     - F. Croce and M. Hein, "Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks," in International conference on machine learning, PMLR, 2020, pp. 2206–2216. [Online]. Available: https://proceedings.mlr.press/v119/croce20b.html
 
 - **auto-verify** ([GitHub](https://github.com/ADA-research/auto-verify))
-    - For integrating verifiers [nnenum](https://github.com/stanleybak/nnenum), [AB-Crown](https://github.com/Verified-Intelligence/alpha-beta-CROWN), [VeriNet](https://github.com/vas-group-imperial/VeriNet), and [Oval-Bab](https://github.com/oval-group/oval-bab). Please refer to the [auto-verify documentation](https://github.com/ADA-research/auto-verify) for details about auto-verify.
+    - For integrating verifiers [nnenum](https://github.com/stanleybak/nnenum), [AB-Crown](https://github.com/Verified-Intelligence/alpha-beta-CROWN), [VeriNet](https://github.com/vas-group-imperial/VeriNet), and [Oval-Bab](https://github.com/oval-group/oval-bab). Please refer to the auto-verify [documentation](https://ada-research.github.io/auto-verify/) for details about auto-verify.
+    
+- **foolbox** ([GitHub](https://github.com/bethgelab/foolbox))
+  - Rauber, J., Brendel, W., and Bethge, M., "Foolbox: A Python toolbox to benchmark the robustness of machine learning models," in *Reliable Machine Learning in the Wild Workshop, 34th International Conference on Machine Learning*, 2017. [Online]. Available: http://arxiv.org/abs/1707.04131
+  - Rauber, J., Zimmermann, R., Bethge, M., and Brendel, W., "Foolbox Native: Fast adversarial attacks to benchmark the robustness of machine learning models in PyTorch, TensorFlow, and JAX," *Journal of Open Source Software*, vol. 5, no. 53, p. 2607, 2020. [Online]. Available: https://doi.org/10.21105/joss.02607
 
 We thank the authors and maintainers of these projects, as well as the authors and maintainers of the verifiers for their contributions to the robustness research community.
 

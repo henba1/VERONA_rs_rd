@@ -16,6 +16,9 @@
 import logging
 from pathlib import Path
 
+import numpy as np
+from foolbox.attacks import LinfPGD
+
 import ada_verona.util.logger as logger
 from ada_verona.database.dataset.image_file_dataset import ImageFileDataset
 from ada_verona.database.experiment_repository import ExperimentRepository
@@ -24,20 +27,20 @@ from ada_verona.epsilon_value_estimator.binary_search_epsilon_value_estimator im
     BinarySearchEpsilonValueEstimator,
 )
 from ada_verona.verification_module.attack_estimation_module import AttackEstimationModule
-from ada_verona.verification_module.attacks.pgd_attack import PGDAttack
+from ada_verona.verification_module.attacks.foolbox_attack import FoolboxAttack
 from ada_verona.verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
 )
 
 logger.setup_logging(level=logging.INFO)
 
-experiment_name = "pgd"
+experiment_name = "foolbox_pgd"
 timeout = 600
-experiment_repository_path = Path("../example_experiment/results")
+experiment_repository_path = Path("../example_experiment/results_foolbox")
 network_folder = Path("../example_experiment/data/networks")
 image_folder = Path("../example_experiment/data/images")
 image_label_file = Path("../example_experiment/data/image_labels.csv")
-epsilon_list = [0.001, 0.005, 0.01, 0.02, 0.05, 0.08]
+epsilon_list = np.arange(0.00, 0.4, 0.0039)
 
 dataset = ImageFileDataset(image_folder=image_folder, label_file=image_label_file)
 
@@ -57,19 +60,25 @@ file_database.save_configuration(
 )
 
 property_generator = One2AnyPropertyGenerator()
-verifier = AttackEstimationModule(attack=PGDAttack(number_iterations=40))
+verifier = AttackEstimationModule(attack=FoolboxAttack(LinfPGD, bounds=(0, 1), steps=10))
 
 epsilon_value_estimator = BinarySearchEpsilonValueEstimator(epsilon_value_list=epsilon_list.copy(), verifier=verifier)
 dataset_sampler = PredictionsBasedSampler(sample_correct_predictions=True)
 
 network_list = file_database.get_network_list()
 
+print(f"Found {len(network_list)} networks.")
+
 for network in network_list:
+    print(f"Processing network: {network.name}")
     sampled_data = dataset_sampler.sample(network, dataset)
+    print(f"Sampled {len(sampled_data)} data points.")
 
-    for data_point in sampled_data:
+    for i, data_point in enumerate(sampled_data):
+        print(f"Verifying data point {i}...")
         verification_context = file_database.create_verification_context(network, data_point, property_generator)
-
         epsilon_value_result = epsilon_value_estimator.compute_epsilon_value(verification_context)
-
+        print(f"Result: {epsilon_value_result}")
         file_database.save_result(epsilon_value_result)
+
+print("Done.")

@@ -1,9 +1,26 @@
+# Copyright 2025 ADA Reseach Group and VERONA council. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+import foolbox as fb
 import pytest
 import torch
 from torch import nn
 
 from ada_verona.verification_module.attacks.auto_attack_wrapper import AutoAttackWrapper
 from ada_verona.verification_module.attacks.fgsm_attack import FGSMAttack
+from ada_verona.verification_module.attacks.foolbox_attack import FoolboxAttack
 from ada_verona.verification_module.attacks.pgd_attack import PGDAttack
 
 
@@ -43,3 +60,8 @@ def pgd_attack():
 @pytest.fixture
 def fgsm_attack():
     return FGSMAttack()
+
+
+@pytest.fixture
+def foolbox_attack():
+    return FoolboxAttack(attack_cls=fb.attacks.LinfFastGradientAttack)
