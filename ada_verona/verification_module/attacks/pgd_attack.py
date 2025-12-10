@@ -26,31 +26,52 @@ class PGDAttack(Attack):
 
     Attributes:
         number_iterations (int): The number of iterations for the attack.
-        step_size (float): The step size for each iteration.
+        rel_stepsize (float): Step size relative to epsilon. If None, uses default based on norm.
+        abs_stepsize (float, optional): Absolute step size. If given, takes precedence over rel_stepsize.
         randomise (bool): Whether to randomize the initial perturbation.
         norm (str): The norm to use ('inf' or 'l2').
     """
 
     def __init__(
-        self, number_iterations: int, step_size: float = None, randomise: bool = False, norm: str = "inf"
+        self,
+        number_iterations: int,
+        rel_stepsize: float = None,
+        abs_stepsize: float = None,
+        step_size: float = None,  # Deprecated: use abs_stepsize instead
+        randomise: bool = False,
+        norm: str = "inf",
     ) -> None:
         """
         Initialize the PGDAttack with specific parameters.
 
         Args:
             number_iterations (int): The number of iterations for the attack.
-            step_size (float, optional): The step size for each iteration. Defaults to None.
+            rel_stepsize (float, optional): Step size relative to epsilon. If None, uses default:
+                - For L2: 2.5 / number_iterations (to match original behavior)
+                - For Linf: 1.0 / number_iterations
+            abs_stepsize (float, optional): Absolute step size. If given, takes precedence over rel_stepsize.
+            step_size (float, optional): Deprecated alias for abs_stepsize. Use abs_stepsize instead.
             randomise (bool, optional): Whether to randomize the initial perturbation. Defaults to False.
             norm (str, optional): The norm to use ('inf' or 'l2'). Defaults to 'inf'.
         """
         super().__init__()
         self.number_iterations = number_iterations
-        self.step_size = step_size
         self.randomise = randomise
         self.norm = norm
+
+        # backward compatibility: step_size -> abs_stepsize
+        if step_size is not None:
+            if abs_stepsize is not None:
+                raise ValueError("Cannot specify both step_size and abs_stepsize. Use abs_stepsize only.")
+            abs_stepsize = step_size
+
+        self.abs_stepsize = abs_stepsize
+        self.rel_stepsize = rel_stepsize
+
         self.name = (
             f"PGDAttack (iterations={self.number_iterations}, "
-            f"step_size={self.step_size}, randomise={self.randomise}, norm={self.norm})"
+            f"rel_stepsize={self.rel_stepsize}, abs_stepsize={self.abs_stepsize}, "
+            f"randomise={self.randomise}, norm={self.norm})"
         )
 
     def execute(self, model: Module, data: Tensor, target: Tensor, epsilon: float) -> Tensor:
@@ -71,12 +92,7 @@ class PGDAttack(Attack):
         loss_fn = nn.CrossEntropyLoss()
         adv_images = data.clone().detach()
 
-        step_size = self.step_size
-        if not step_size:
-            if self.norm == "l2":
-                step_size = 2.5 * epsilon / self.number_iterations
-            else:
-                step_size = epsilon / self.number_iterations
+        step_size = self.abs_stepsize if self.abs_stepsize is not None else self.rel_stepsize * epsilon
 
         if self.randomise:
             if self.norm == "l2":
