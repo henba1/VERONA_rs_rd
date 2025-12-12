@@ -58,6 +58,7 @@ from .epsilon_value_estimator.iterative_epsilon_value_estimator import (
 from .verification_module.attack_estimation_module import AttackEstimationModule
 from .verification_module.attacks.attack import Attack
 from .verification_module.attacks.fgsm_attack import FGSMAttack
+from .verification_module.attacks.foolbox_attack import FoolboxAttack
 from .verification_module.attacks.pgd_attack import PGDAttack
 from .verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
@@ -88,12 +89,56 @@ if not HAS_AUTOVERIFY:
         stacklevel=2,
     )
 
+# Import rs_rd utilities if available
+try:
+    import sys
+    from pathlib import Path
+
+    # Add parent directory to path to allow importing rs_rd
+    _ada_verona_path = Path(__file__).parent.parent
+    if str(_ada_verona_path) not in sys.path:
+        sys.path.insert(0, str(_ada_verona_path))
+
+    # Import rs_rd utilities
+    from rs_rd.utils import comet_tracker, experiment_utils, paths
+
+    CometTracker = comet_tracker.CometTracker
+    log_classifier_metrics = comet_tracker.log_classifier_metrics
+    log_verona_experiment_summary = comet_tracker.log_verona_experiment_summary
+    log_verona_results = comet_tracker.log_verona_results
+
+    create_distribution = experiment_utils.create_distribution
+    get_balanced_sample = experiment_utils.get_balanced_sample
+    get_sample = experiment_utils.get_sample
+    load_networks_from_directory = experiment_utils.load_networks_from_directory
+
+    get_dataset_dir = paths.get_dataset_dir
+    get_models_dir = paths.get_models_dir
+    get_results_dir = paths.get_results_dir
+
+    HAS_RS_RD_UTILS = True
+except (ImportError, AttributeError):
+    HAS_RS_RD_UTILS = False
+    # Define placeholders to avoid NameError
+    CometTracker = None
+    log_classifier_metrics = None
+    log_verona_experiment_summary = None
+    log_verona_results = None
+    create_distribution = None
+    get_balanced_sample = None
+    get_sample = None
+    get_dataset_dir = None
+    get_models_dir = None
+    get_results_dir = None
+    load_networks_from_directory = None
+
 
 __all__ = [
     "__version__",
     "__author__",
     "HAS_AUTOATTACK",
     "HAS_AUTOVERIFY",
+    "HAS_RS_RD_UTILS",
     # Core abstract classes
     "DatasetSampler",
     "EpsilonValueEstimator",
@@ -125,9 +170,22 @@ __all__ = [
     "AttackEstimationModule",
     "PGDAttack",
     "FGSMAttack",
+    "FoolboxAttack",
     # Property generator classes
     "One2AnyPropertyGenerator",
     "One2OnePropertyGenerator",
+    # rs_rd utility classes and functions
+    "CometTracker",
+    "log_classifier_metrics",
+    "log_verona_experiment_summary",
+    "log_verona_results",
+    "create_distribution",
+    "get_balanced_sample",
+    "get_sample",
+    "get_dataset_dir",
+    "get_models_dir",
+    "get_results_dir",
+    "load_networks_from_directory",
 ]
 
 

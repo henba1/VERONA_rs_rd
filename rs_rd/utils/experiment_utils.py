@@ -7,6 +7,7 @@ and distribution creation.
 """
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -19,7 +20,10 @@ from ada_verona import (
     EpsilonValueEstimator,
     ExperimentDataset,
     ExperimentRepository,
+    Network,
+    ONNXNetwork,
     PropertyGenerator,
+    PyTorchNetwork,
 )
 
 
@@ -168,6 +172,53 @@ def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, datas
     return sampled_dataset, sample_idx
 
 
+def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], device: torch.device) -> list[Network]:
+    """
+    Load networks from a directory supporting both ONNX and PyTorch (.pth) models.
+
+    Args:
+        models_dir: Directory containing model files
+        input_shape: Input shape tuple for PyTorch models (e.g., (1, 3, 32, 32))
+        device: PyTorch device to load models on
+
+    Returns:
+        List of Network objects (ONNXNetwork or PyTorchNetwork)
+    """
+    network_list = []
+
+    # Load ONNX models
+    for model_path in sorted(models_dir.glob("*.onnx")):
+        # Check if file exists (handles symlinks correctly)
+        if model_path.exists() and (model_path.is_file() or model_path.is_symlink()):
+            try:
+                network_list.append(ONNXNetwork(path=model_path))
+                logging.info(f"Loaded ONNX model: {model_path.name}")
+            except Exception as e:
+                logging.warning(f"Failed to load ONNX model {model_path.name}: {e}")
+
+    # Load PyTorch models
+    for model_path in sorted(models_dir.glob("*.pth")):
+        if model_path.exists() and (model_path.is_file() or model_path.is_symlink()):
+            try:
+                loaded = torch.load(model_path, map_location=device, weights_only=False)
+                model = loaded.to(device)
+                model.eval()
+
+                network_list.append(
+                    PyTorchNetwork(
+                        model=model,
+                        input_shape=input_shape,
+                        name=model_path.stem,
+                        path=model_path,
+                    )
+                )
+                logging.info(f"Loaded PyTorch model: {model_path.name}")
+            except Exception as e:
+                logging.warning(f"Failed to load PyTorch model {model_path.name}: {e}")
+
+    return network_list
+
+
 def find_config(network_identifier, config_dict):
     """
     Find configuration path for a given network identifier.
@@ -276,5 +327,11 @@ def create_distribution(
 
             experiment_repository.save_result(epsilon_value_result)
 
-    experiment_repository.save_plots()
+    # Try to save plots, cont upon error (e.g., due to insufficient data for KDE)
+    try:
+        experiment_repository.save_plots()
+    except Exception as e:
+        logging.warning(f"Failed to save plots: {e}")
+        logging.info("Continuing without plots - results CSV files are still available")
+
     logging.info(f"Failed for networks: {failed_networks}")

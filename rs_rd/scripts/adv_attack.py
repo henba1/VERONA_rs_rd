@@ -1,35 +1,42 @@
+import contextlib
 import logging
 import os
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import torch
-from foolbox.attacks import L2CarliniWagnerAttack, L2ProjectedGradientDescentAttack
-
-# Add workspace root to path for rs_rd_research
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from comet_tracker import CometTracker, log_classifier_metrics, log_verona_experiment_summary, log_verona_results
-from experiment_utils import create_distribution, get_balanced_sample, get_sample
-from rs_rd_research.paths import get_dataset_dir, get_models_dir, get_results_dir
+from foolbox.attacks import L2ProjectedGradientDescentAttack
 
 import ada_verona.util.logger as logger
 from ada_verona import (
     AttackEstimationModule,
     BinarySearchEpsilonValueEstimator,
+    CometTracker,
     ExperimentRepository,
     FoolboxAttack,
     IdentitySampler,
     One2AnyPropertyGenerator,
     PGDAttack,
     PredictionsBasedSampler,
-    PyTorchNetwork,
     PytorchExperimentDataset,
+    create_distribution,
+    get_balanced_sample,
+    get_dataset_dir,
+    get_models_dir,
+    get_results_dir,
+    get_sample,
+    load_networks_from_directory,
+    log_classifier_metrics,
+    log_verona_experiment_summary,
+    log_verona_results,
 )
 
 logger.setup_logging(level=logging.INFO)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("dulwich").setLevel(logging.WARNING)
+logging.getLogger("comet_ml").setLevel(logging.INFO)
 
 
 def main():
@@ -41,20 +48,20 @@ def main():
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 200
+    sample_size = 5
     random_seed = 42
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
     use_identity_sampler = False
     sample_correct_predictions = True
     sample_stratified = False
 
-    experiment_type = "adv_vs_sdp"  # Experiment type for tracking
-    models_experiment_type = "sdp_verification"  # Directory to load models from
+    experiment_type = "experiment_refactor_test"  # Experiment type for tracking
+    models_experiment_type = "experiment_refactor_test"  # Directory to load models from
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
     epsilon_stop = 0.5
-    epsilon_step = 1 / 255
+    epsilon_step = 8 / 255
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
     MODELS_DIR = get_models_dir(dataset_name) / models_experiment_type  # Load models from sdp_verification directory
@@ -75,26 +82,12 @@ def main():
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    network_list = []
-    for model_path in MODELS_DIR.glob("*.pth"):
-        loaded = torch.load(model_path, map_location=device, weights_only=False)
-        model = loaded.to(device)
-        model.eval()
-
-        network_list.append(
-            PyTorchNetwork(
-                model=model,
-                input_shape=input_shape,
-                name=model_path.stem,
-                path=model_path,
-            )
-        )
-
+    network_list = load_networks_from_directory(MODELS_DIR, input_shape, device)
     model_names = [network.name for network in network_list]
-    
+
     if len(network_list) == 0:
         logging.error(f"No models found in {MODELS_DIR}")
-        logging.error("Ensure models exist in the models directory")
+        logging.error("Ensure models exist in models directory (formats: .onnx, .pth)")
         return
 
     epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
@@ -148,18 +141,18 @@ def main():
             "attack_type": "PGD",
             "attack_iterations": 40,
         },
-        {
-            "name": "foolbox_pgd_l2",
-            "attack": FoolboxAttack(L2ProjectedGradientDescentAttack, bounds=(0, 1), steps=40),
-            "attack_type": "Foolbox PGD L2",
-            "attack_iterations": 40,
-        },
-        {
-            "name": "foolbox_cw_l2",
-            "attack": FoolboxAttack(L2CarliniWagnerAttack, bounds=(0, 1), steps=100),
-            "attack_type": "Foolbox CW L2",
-            "attack_iterations": 100,
-        },
+        # {
+        #     "name": "foolbox_pgd_l2",
+        #     "attack": FoolboxAttack(L2ProjectedGradientDescentAttack, bounds=(0, 1), steps=40),
+        #     "attack_type": "Foolbox PGD L2",
+        #     "attack_iterations": 40,   #NOTE: Foolbox attacks are not supported for onnx models
+        # },
+        # {
+        #     "name": "foolbox_cw_l2",
+        #     "attack": FoolboxAttack(L2CarliniWagnerAttack, bounds=(0, 1), steps=100),
+        #     "attack_type": "Foolbox CW L2",
+        #     "attack_iterations": 100,
+        # },
     ]
 
     # Initialize first experiment for classifier metrics computation and indices file saving
@@ -219,92 +212,99 @@ def main():
             logging.error(f"Failed to compute metrics for network {network.name}: {e}")
 
     # Run each attack configuration
+    logging.info(f"Running {len(attack_configs)} attack configuration(s): {[cfg['name'] for cfg in attack_configs]}")
     for idx, attack_config in enumerate(attack_configs):
         attack_name = attack_config["name"]
-        logging.info(f"Starting experiment for attack: {attack_name}")
+        logging.info(f"Starting experiment for attack: {attack_name} (attack {idx + 1}/{len(attack_configs)})")
 
-       
-        if idx > 0 or attack_name != first_attack_name:
-            experiment_repository.initialize_new_experiment(attack_name)
+        try:
+            if idx > 0 or attack_name != first_attack_name:
+                experiment_repository.initialize_new_experiment(attack_name)
 
-        # Start Comet experiment for this attack
-        comet_tracker.start_experiment(
-            experiment_name=f"rs_rd_{attack_name}_CIFAR-10_{timestamp}",
-            tags=[experiment_type, dataset_name, attack_name, epsilon_tag, *model_names],
-        )
+            # Start Comet experiment for this attack
+            comet_tracker.start_experiment(
+                experiment_name=f"rs_rd_{attack_name}_CIFAR-10_{timestamp}",
+                tags=[experiment_type, dataset_name, attack_name, epsilon_tag, *model_names],
+            )
 
-        # Log attack-specific parameters
-        attack_params = {
-            **base_params,
-            "experiment_name": attack_name,
-            "attack_type": attack_config["attack_type"],
-            "attack_iterations": attack_config["attack_iterations"],
-        }
-        comet_tracker.log_parameters(attack_params)
+            # Log attack-specific parameters
+            attack_params = {
+                **base_params,
+                "experiment_name": attack_name,
+                "attack_type": attack_config["attack_type"],
+                "attack_iterations": attack_config["attack_iterations"],
+            }
+            comet_tracker.log_parameters(attack_params)
 
-        # Log classifier metrics for this attack experiment (using pre-computed metrics)
-        for network in network_list:
-            if network.name in network_metrics:
-                log_classifier_metrics(comet_tracker, network.name, network_metrics[network.name])
-                # Log predictions file if this is the first attack
-                if idx == 0:
-                    predictions_file = (
-                        experiment_repository.get_act_experiment_path()
-                        / f"{network.name}_predictions_{timestamp}.txt"
-                    )
-                    if predictions_file.exists():
-                        comet_tracker.log_asset(predictions_file)
+            # Log classifier metrics for this attack experiment (using pre-computed metrics)
+            for network in network_list:
+                if network.name in network_metrics:
+                    log_classifier_metrics(comet_tracker, network.name, network_metrics[network.name])
+                    # Log predictions file if this is the first attack
+                    if idx == 0:
+                        predictions_file = (
+                            experiment_repository.get_act_experiment_path()
+                            / f"{network.name}_predictions_{timestamp}.txt"
+                        )
+                        if predictions_file.exists():
+                            comet_tracker.log_asset(predictions_file)
 
-        # Create the attack estimator
-        robustness_attack_estimator = AttackEstimationModule(attack=attack_config["attack"])
+            # Create robustness estimator
+            robustness_attack_estimator = AttackEstimationModule(attack=attack_config["attack"])
 
-        # Create epsilon value estimator with this attack estimator
-        epsilon_value_estimator = BinarySearchEpsilonValueEstimator(
-            epsilon_value_list=epsilon_list.copy(), verifier=robustness_attack_estimator
-        )
+            # Create epsilon value estimator with this attack estimator
+            epsilon_value_estimator = BinarySearchEpsilonValueEstimator(
+                epsilon_value_list=epsilon_list.copy(), verifier=robustness_attack_estimator
+            )
 
-        # Create robustness distribution
-        create_distribution(
-            experiment_repository,
-            dataset,
-            dataset_sampler,
-            epsilon_value_estimator,
-            property_generator,
-            network_list=network_list,
-        )
-        results_path = experiment_repository.get_results_path()
+            # Create robustness distribution
+            create_distribution(
+                experiment_repository,
+                dataset,
+                dataset_sampler,
+                epsilon_value_estimator,
+                property_generator,
+                network_list=network_list,
+            )
+            results_path = experiment_repository.get_results_path()
 
-        # Log result files (image_id column now contains original CIFAR-10 indices)
-        log_verona_results(comet_tracker, results_path)
-        logging.info("Result files contain original dataset indices in the image_id column")
+            # Log result files (image_id column now contains original CIFAR-10 indices)
+            log_verona_results(comet_tracker, results_path)
+            logging.info("Result files contain original dataset indices in the image_id column")
 
-        # Log experiment summary
-        experiment_path = experiment_repository.get_act_experiment_path()
-        log_verona_experiment_summary(
-            comet_tracker,
-            experiment_repository_path=experiment_repository_path,
-            experiment_path=experiment_path,
-            results_path=results_path,
-            dataset_info={
-                "name": dataset_name,
-                "split": split,
-                "sample_size": sample_size,
-                "sample_correct_predictions": sample_correct_predictions,
-            },
-            attack_info={
-                "type": attack_name,
-            },
-            epsilon_info={
-                "start": epsilon_start,
-                "stop": epsilon_stop,
-                "step": epsilon_step,
-                "list": epsilon_list,
-            },
-        )
+            # Log experiment summary
+            experiment_path = experiment_repository.get_act_experiment_path()
+            log_verona_experiment_summary(
+                comet_tracker,
+                experiment_repository_path=experiment_repository_path,
+                experiment_path=experiment_path,
+                results_path=results_path,
+                dataset_info={
+                    "name": dataset_name,
+                    "split": split,
+                    "sample_size": sample_size,
+                    "sample_correct_predictions": sample_correct_predictions,
+                },
+                attack_info={
+                    "type": attack_name,
+                },
+                epsilon_info={
+                    "start": epsilon_start,
+                    "stop": epsilon_stop,
+                    "step": epsilon_step,
+                    "list": epsilon_list,
+                },
+            )
 
-        # End Comet experiment for this attack
-        comet_tracker.end_experiment()
-        logging.info(f"Completed experiment for attack: {attack_name}")
+            comet_tracker.end_experiment()
+            logging.info(f"Completed experiment for attack: {attack_name}")
+
+        except Exception as e:
+            logging.error(f"Failed to complete experiment for attack {attack_name}: {e}", exc_info=True)
+            with contextlib.suppress(Exception):
+                comet_tracker.end_experiment()
+            logging.warning(f"Skipping to next attack after failure in {attack_name}")
+            continue
 
     # Log final metrics
     total_duration = time.time() - start_time
