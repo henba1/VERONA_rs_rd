@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from rs_rd_research.paths import get_results_dir
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from paths import get_results_dir
 
 from ada_verona.analysis.report_creator import ReportCreator
 from ada_verona.analysis.report_creator_verifier import ReportCreatorVerifier

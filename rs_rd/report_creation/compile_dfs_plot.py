@@ -14,8 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
-from rs_rd.report_creation.generate_comparison_plots import generate_verifier_comparison_plots
+from generate_comparison_plots import generate_verifier_comparison_plots
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -60,15 +59,46 @@ def main():
         default="verifier",
         help="Column to use for hue/grouping in plots: 'network' or 'verifier' (default: verifier)",
     )
+    parser.add_argument(
+        "--custom-labels",
+        nargs="*",
+        type=str,
+        default=None,
+        help=(
+            "Optional custom labels for the hue column (network/verifier). "
+            "If provided, must have the same length as the number of CSV paths; "
+            "each label will overwrite the corresponding CSV's value in the chosen hue column."
+        ),
+    )
 
     args = parser.parse_args()
 
-    # Load all dataframes
+    if args.custom_labels is not None and len(args.custom_labels) != len(args.csv_paths):
+            logger.error(
+                "Number of --custom-labels (%d) must match number of CSV paths (%d)",
+                len(args.custom_labels),
+                len(args.csv_paths),
+            )
+            sys.exit(1)
+
     logger.info(f"Loading {len(args.csv_paths)} CSV file(s)")
     dataframes = []
-    for csv_path in args.csv_paths:
+    for idx, csv_path in enumerate(args.csv_paths):
         try:
             df = load_csv(csv_path)
+
+            if args.custom_labels is not None:
+                label = args.custom_labels[idx]
+                hue_col = args.hue_by
+                if hue_col not in df.columns:
+                    logger.warning(
+                        "Hue column '%s' not found in %s; creating it with custom label '%s'",
+                        hue_col,
+                        csv_path,
+                        label,
+                    )
+                df[hue_col] = label
+
             dataframes.append(df)
             logger.info(f"  Loaded {csv_path.name}: {len(df)} rows")
         except Exception as e:
