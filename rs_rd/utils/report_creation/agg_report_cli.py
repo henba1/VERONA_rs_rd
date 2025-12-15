@@ -1,15 +1,9 @@
-#!/usr/bin/env python3
-"""
-CLI to load one or more result CSV files and generate verifier/network comparison plots.
-"""
-
 import argparse
 import logging
 import sys
 from pathlib import Path
 
 import pandas as pd
-
 from agg_report_creator import generate_verifier_comparison_plots
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -126,5 +120,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

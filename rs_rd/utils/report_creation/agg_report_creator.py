@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Core utilities to generate verifier/network comparison plots from one or more result DataFrames.
-"""
-
 import logging
 import sys
 from datetime import datetime
@@ -11,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from paths import get_results_dir 
+from paths import get_results_dir
 
 from ada_verona.analysis.report_creator import ReportCreator
 from ada_verona.analysis.report_creator_verifier import ReportCreatorVerifier
@@ -107,5 +102,3 @@ def generate_verifier_comparison_plots(
     plot_paths["concatenated_dataframe"] = df_path
     logger.info("All plots and concatenated dataframe saved to %s", output_dir)
     return plot_paths
-
-

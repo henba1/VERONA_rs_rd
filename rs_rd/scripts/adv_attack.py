@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from foolbox.attacks import L2CarliniWagnerAttack, L2ProjectedGradientDescentAttack
 
 import ada_verona.util.logger as logger
 from ada_verona import (
@@ -15,7 +14,6 @@ from ada_verona import (
     BinarySearchEpsilonValueEstimator,
     CometTracker,
     ExperimentRepository,
-    FoolboxAttack,
     IdentitySampler,
     One2AnyPropertyGenerator,
     PGDAttack,
@@ -72,7 +70,7 @@ def main():
 
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
     experiment_dir_name = (
-        f"verona_rs_rd_attacks_{dataset_name}_{sample_size}_"
+        f"adv_attack_{dataset_name}_{sample_size}_"
         f"sample_correct_{sample_correct_predictions}_"
         f"sample_stratified_{sample_stratified}"
     )
@@ -139,9 +137,9 @@ def main():
     pgd_random_start = False
 
     # Carlini-Wagner parameters
-    cw_steps = pgd_iterations
-    cw_stepsize = 0.01
-    cw_binary_search_steps = 5
+    # cw_steps = pgd_iterations
+    # cw_stepsize = 0.01
+    # cw_binary_search_steps = 5
 
     attack_configs = [
         {
@@ -155,31 +153,31 @@ def main():
             "attack_type": "PGD",
             "attack_iterations": pgd_iterations,
         },
-        {
-            "name": "foolbox_pgd_l2",
-            "attack": FoolboxAttack(
-                L2ProjectedGradientDescentAttack,
-                bounds=(0, 1),
-                steps=pgd_iterations,
-                rel_stepsize=pgd_rel_stepsize,
-                random_start=pgd_random_start,
-            ),
-            "attack_type": "Foolbox PGD L2",
-            "attack_iterations": pgd_iterations,
-        },
-        {
-            "name": "foolbox_cw_l2",
-            "attack": FoolboxAttack(
-                L2CarliniWagnerAttack,
-                bounds=(0, 1),
-                steps=cw_steps,
-                stepsize=cw_stepsize,
-                binary_search_steps=cw_binary_search_steps,
-                abort_early=True,  # Stop early when attack succeeds (similar to PGD behavior)
-            ),
-            "attack_type": "Foolbox CW L2",
-            "attack_iterations": cw_steps * cw_binary_search_steps,  # Total iterations
-        },
+        # {
+        #     "name": "foolbox_pgd_l2",
+        #     "attack": FoolboxAttack(
+        #         L2ProjectedGradientDescentAttack,
+        #         bounds=(0, 1),
+        #         steps=pgd_iterations,
+        #         rel_stepsize=pgd_rel_stepsize,
+        #         random_start=pgd_random_start,
+        #     ),
+        #     "attack_type": "Foolbox PGD L2",
+        #     "attack_iterations": pgd_iterations,
+        # },
+        # {
+        #     "name": "foolbox_cw_l2",
+        #     "attack": FoolboxAttack(
+        #         L2CarliniWagnerAttack,
+        #         bounds=(0, 1),
+        #         steps=cw_steps,
+        #         stepsize=cw_stepsize,
+        #         binary_search_steps=cw_binary_search_steps,
+        #         abort_early=True,  # Stop early when attack succeeds (similar to PGD behavior)
+        #     ),
+        #     "attack_type": "Foolbox CW L2",
+        #     "attack_iterations": cw_steps * cw_binary_search_steps,  # Total iterations
+        # },
     ]
 
     # Initialize first experiment for classifier metrics computation and indices file saving

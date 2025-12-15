@@ -1,0 +1,3 @@
+[submodule "rs_rd/randomized_smoothing"]
+	path = rs_rd/randomized_smoothing
+	url = https://github.com/henba1/randomized_smoothing.git

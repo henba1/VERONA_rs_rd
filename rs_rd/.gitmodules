@@ -1,0 +1,2 @@
+[submodule "rs_rd/randomized_smoothing"]
+	url = git@github.com:henba1/randomized_smoothing.git
