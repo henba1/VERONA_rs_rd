@@ -58,7 +58,6 @@ from .epsilon_value_estimator.iterative_epsilon_value_estimator import (
 from .verification_module.attack_estimation_module import AttackEstimationModule
 from .verification_module.attacks.attack import Attack
 from .verification_module.attacks.fgsm_attack import FGSMAttack
-from .verification_module.attacks.foolbox_attack import FoolboxAttack
 from .verification_module.attacks.pgd_attack import PGDAttack
 from .verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
@@ -86,6 +85,13 @@ if not HAS_AUTOVERIFY:
     warnings.warn(
         "AutoVerify not found. Some complete verification features will be limited. "
         "To install: uv pip install auto-verify>=0.1.4",
+        stacklevel=2,
+    )
+
+HAS_FOOLBOX = importlib.util.find_spec("foolbox") is not None
+if not HAS_FOOLBOX:
+    warnings.warn(
+        "Foolbox not found. Some adversarial attack features will be limited. To install: uv pip install foolbox",
         stacklevel=2,
     )
 
@@ -119,7 +125,6 @@ try:
     HAS_RS_RD_UTILS = True
 except (ImportError, AttributeError):
     HAS_RS_RD_UTILS = False
-    # Define placeholders to avoid NameError
     CometTracker = None
     log_classifier_metrics = None
     log_verona_experiment_summary = None
@@ -138,6 +143,7 @@ __all__ = [
     "__author__",
     "HAS_AUTOATTACK",
     "HAS_AUTOVERIFY",
+    "HAS_FOOLBOX",
     "HAS_RS_RD_UTILS",
     # Core abstract classes
     "DatasetSampler",
@@ -170,7 +176,6 @@ __all__ = [
     "AttackEstimationModule",
     "PGDAttack",
     "FGSMAttack",
-    "FoolboxAttack",
     # Property generator classes
     "One2AnyPropertyGenerator",
     "One2OnePropertyGenerator",
@@ -206,3 +211,8 @@ if HAS_AUTOVERIFY:
             "parse_counter_example_label",
         ]
     )
+
+if HAS_FOOLBOX:
+    foolbox_module = importlib.import_module(".verification_module.attacks.foolbox_attack", __package__)
+    FoolboxAttack = foolbox_module.FoolboxAttack
+    __all__.extend(["FoolboxAttack"])
