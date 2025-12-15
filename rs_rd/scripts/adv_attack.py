@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from foolbox.attacks import L2ProjectedGradientDescentAttack
+from foolbox.attacks import L2CarliniWagnerAttack, L2ProjectedGradientDescentAttack
 
 import ada_verona.util.logger as logger
 from ada_verona import (
@@ -133,26 +133,53 @@ def main():
     # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO adjust for ImageNet
     property_generator = One2AnyPropertyGenerator()
 
-    # Define multiple attack configurations
+    # PGD parameters
+    pgd_iterations = 40
+    pgd_rel_stepsize = 0.025
+    pgd_random_start = False
+
+    # Carlini-Wagner parameters
+    cw_steps = pgd_iterations
+    cw_stepsize = 0.01
+    cw_binary_search_steps = 5
+
     attack_configs = [
         {
             "name": "pgd_l2",
-            "attack": PGDAttack(number_iterations=40, norm="l2"),
+            "attack": PGDAttack(
+                number_iterations=pgd_iterations,
+                rel_stepsize=pgd_rel_stepsize,
+                randomise=pgd_random_start,
+                norm="l2",
+            ),
             "attack_type": "PGD",
-            "attack_iterations": 40,
+            "attack_iterations": pgd_iterations,
         },
-        # {
-        #     "name": "foolbox_pgd_l2",
-        #     "attack": FoolboxAttack(L2ProjectedGradientDescentAttack, bounds=(0, 1), steps=40),
-        #     "attack_type": "Foolbox PGD L2",
-        #     "attack_iterations": 40,   #NOTE: Foolbox attacks are not supported for onnx models
-        # },
-        # {
-        #     "name": "foolbox_cw_l2",
-        #     "attack": FoolboxAttack(L2CarliniWagnerAttack, bounds=(0, 1), steps=100),
-        #     "attack_type": "Foolbox CW L2",
-        #     "attack_iterations": 100,
-        # },
+        {
+            "name": "foolbox_pgd_l2",
+            "attack": FoolboxAttack(
+                L2ProjectedGradientDescentAttack,
+                bounds=(0, 1),
+                steps=pgd_iterations,
+                rel_stepsize=pgd_rel_stepsize,
+                random_start=pgd_random_start,
+            ),
+            "attack_type": "Foolbox PGD L2",
+            "attack_iterations": pgd_iterations,
+        },
+        {
+            "name": "foolbox_cw_l2",
+            "attack": FoolboxAttack(
+                L2CarliniWagnerAttack,
+                bounds=(0, 1),
+                steps=cw_steps,
+                stepsize=cw_stepsize,
+                binary_search_steps=cw_binary_search_steps,
+                abort_early=True,  # Stop early when attack succeeds (similar to PGD behavior)
+            ),
+            "attack_type": "Foolbox CW L2",
+            "attack_iterations": cw_steps * cw_binary_search_steps,  # Total iterations
+        },
     ]
 
     # Initialize first experiment for classifier metrics computation and indices file saving
