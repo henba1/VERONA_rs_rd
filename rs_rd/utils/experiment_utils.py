@@ -38,9 +38,9 @@ def get_dataset_config():
             - channels: Number of color channels
     """
     return {
-        "CIFAR-10": {"class": datasets.CIFAR10, "default_size": (32, 32), "channels": 3},
-        "MNIST": {"class": datasets.MNIST, "default_size": (28, 28), "channels": 1},
-        "ImageNet": {"class": datasets.ImageNet, "default_size": (224, 224), "channels": 3},
+        "CIFAR-10": {"class": datasets.CIFAR10, "default_size": (32, 32), "channels": 3, "num_classes": 10},
+        "MNIST": {"class": datasets.MNIST, "default_size": (28, 28), "channels": 1, "num_classes": 10},
+        "ImageNet": {"class": datasets.ImageNet, "default_size": (224, 224), "channels": 3, "num_classes": 1000},
     }
 
 
@@ -81,29 +81,21 @@ def get_balanced_sample(
     config = dataset_config[dataset_name]
     target_size = image_size if image_size is not None else config["default_size"]
 
-    # Create transforms
     data_transforms = transforms.Compose([transforms.Resize(target_size), transforms.ToTensor(), torch.flatten])
 
     dataset_class = config["class"]
 
+    torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+
+    # Extract labels
+    labels = torch.tensor([torch_dataset[i][1] for i in range(len(torch_dataset))])
+
+    # Use StratifiedShuffleSplit with appropriate size parameter based on train_bool
     if train_bool:
-        torch_dataset = dataset_class(root=dataset_dir, train=True, download=False, transform=data_transforms)
-
-        # Extract labels
-        labels = torch.tensor([torch_dataset[i][1] for i in range(len(torch_dataset))])
-
-        # Use StratifiedShuffleSplit to create balanced subsets
         splitter = StratifiedShuffleSplit(n_splits=1, train_size=dataset_size, random_state=seed)
         for train_idx, _ in splitter.split(np.zeros(len(labels)), labels):
             balanced_sample_idx = train_idx
-
     else:
-        torch_dataset = dataset_class(root=dataset_dir, train=False, download=False, transform=data_transforms)
-
-        # Extract labels
-        labels = torch.tensor([torch_dataset[i][1] for i in range(len(torch_dataset))])
-
-        # Use StratifiedShuffleSplit to create balanced subsets
         splitter = StratifiedShuffleSplit(n_splits=1, test_size=dataset_size, random_state=seed)
         for _, test_idx in splitter.split(np.zeros(len(labels)), labels):
             balanced_sample_idx = test_idx
@@ -149,24 +141,19 @@ def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, datas
     config = dataset_config[dataset_name]
     target_size = image_size if image_size is not None else config["default_size"]
 
-    # Create transforms
     data_transforms = transforms.Compose([transforms.Resize(target_size), transforms.ToTensor(), torch.flatten])
 
     dataset_class = config["class"]
 
-    # Load the appropriate split
     torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
 
-    # Random sampling without stratification
     dataset_length = len(torch_dataset)
     if dataset_size > dataset_length:
         raise ValueError(f"Requested sample size {dataset_size} exceeds dataset size {dataset_length}")
 
-    # Generate random indices
     all_indices = np.arange(dataset_length)
     sample_idx = np.random.choice(all_indices, size=dataset_size, replace=False)
 
-    # Create subset of original dataset using the sampled indices
     sampled_dataset = Subset(torch_dataset, sample_idx)
 
     return sampled_dataset, sample_idx
@@ -234,6 +221,92 @@ def find_config(network_identifier, config_dict):
         if key in str(network_identifier.path):
             return path
     return None
+
+
+def create_experiment_directory(
+    results_dir: Path | str,
+    experiment_type: str,
+    dataset_name: str,
+    timestamp: str | None = None,
+) -> Path:
+    """
+    Create an experiment directory with standardized naming convention.
+
+    The directory name follows the pattern: experiment_type_dataset_name_timestamp
+
+    Args:
+        results_dir: Base results directory where experiment folder will be created
+        experiment_type: Type of experiment (e.g., "adv_attack", "certification")
+        dataset_name: Name of the dataset (e.g., "CIFAR-10", "MNIST")
+        timestamp: Optional timestamp string. If None, will be generated.
+
+    Returns:
+        Path to the created experiment directory
+    """
+    from datetime import datetime
+
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Create safe dataset name (lowercase, dashes replaced with underscores)
+    dataset_name_safe = dataset_name.lower().replace("-", "_")
+
+    experiment_dir_name = f"{experiment_type}_{dataset_name_safe}_{timestamp}"
+    experiment_dir_path = results_dir / experiment_dir_name
+    experiment_dir_path.mkdir(parents=True, exist_ok=True)
+
+    return experiment_dir_path
+
+
+def save_original_indices(
+    dataset_name: str,
+    original_indices: np.ndarray,
+    output_dir: Path | str,
+    sample_size: int,
+    timestamp: str,
+    split: str | None = None,
+    set_type: str = "test",
+) -> Path:
+    """
+    Save original dataset indices to a text file.
+
+    Creates a file containing the original dataset indices for a sampled subset,
+    with appropriate naming and header information.
+
+    Args:
+        dataset_name: Name of the dataset (e.g., "CIFAR-10", "MNIST")
+        original_indices: Array of original dataset indices
+        output_dir: Directory where the indices file should be saved
+        sample_size: Number of samples in the subset
+        timestamp: Timestamp string for file naming
+        split: Optional split identifier (e.g., "train", "test"). If provided,
+               included in filename and header
+        set_type: Type of dataset set (default: "test"). Used in header message.
+
+    Returns:
+        Path to the saved indices file
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset_name_safe = dataset_name.lower().replace("-", "_")
+
+    if split:
+        filename = f"original_{dataset_name_safe}_indices_{split}_nsample_{sample_size}_{timestamp}.txt"
+        header = f"Original {dataset_name} {split} indices for balanced sample"
+    else:
+        filename = f"original_{dataset_name_safe}_indices_nsample_{sample_size}_{timestamp}.txt"
+        header = f"Original {dataset_name} {set_type} indices for balanced sample (n_sample={sample_size})"
+
+    indices_file = output_dir / filename
+
+    np.savetxt(indices_file, original_indices, fmt="%d", header=header)
+    logging.info(f"Saved original {dataset_name} indices to {indices_file}")
+
+    return indices_file
 
 
 def add_original_indices_to_result_df(results_path, original_indices):
