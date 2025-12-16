@@ -187,11 +187,8 @@ def main():
         original_indices=original_indices,
         output_dir=experiment_repository.get_act_experiment_path(),
         sample_size=sample_size,
-        timestamp=timestamp,
         split=split,
     )
-
-    # Log indices file to Comet ML
     comet_tracker.log_asset(indices_file)
 
     # ----------------------------------------DATASET SAMPLER CONFIGURATION------------------------------------------

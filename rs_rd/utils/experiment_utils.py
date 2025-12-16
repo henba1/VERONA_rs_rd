@@ -45,7 +45,7 @@ def get_dataset_config():
 
 
 def get_balanced_sample(
-    dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None
+    dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None, flatten=True
 ):
     """
     Get a balanced sample from a PyTorch dataset.
@@ -61,6 +61,8 @@ def get_balanced_sample(
         seed: Random seed for reproducibility
         image_size: Target image size (width, height). If None, uses dataset defaults:
                    MNIST: (28, 28), CIFAR-10: (32, 32), ImageNet: (224, 224)
+        flatten: If True, flatten images to 1D tensors. If False, keep images as (C, H, W).
+                 Default True for backwards compatibility.
 
     Returns:
         tuple: (balanced_dataset, balanced_sample_idx)
@@ -81,7 +83,10 @@ def get_balanced_sample(
     config = dataset_config[dataset_name]
     target_size = image_size if image_size is not None else config["default_size"]
 
-    data_transforms = transforms.Compose([transforms.Resize(target_size), transforms.ToTensor(), torch.flatten])
+    transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
+    if flatten:
+        transform_list.append(torch.flatten)
+    data_transforms = transforms.Compose(transform_list)
 
     dataset_class = config["class"]
 
@@ -106,7 +111,9 @@ def get_balanced_sample(
     return balanced_dataset, balanced_sample_idx
 
 
-def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None):
+def get_sample(
+    dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None, flatten=True
+):
     """
     Get a random sample from a PyTorch dataset without stratification.
 
@@ -121,6 +128,8 @@ def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, datas
         seed: Random seed for reproducibility
         image_size: Target image size (width, height). If None, uses dataset defaults:
                    MNIST: (28, 28), CIFAR-10: (32, 32), ImageNet: (224, 224)
+        flatten: If True, flatten images to 1D tensors. If False, keep images as (C, H, W).
+                 Default True for backwards compatibility.
 
     Returns:
         tuple: (sampled_dataset, sample_idx)
@@ -141,7 +150,10 @@ def get_sample(dataset_name="CIFAR-10", train_bool=True, dataset_size=100, datas
     config = dataset_config[dataset_name]
     target_size = image_size if image_size is not None else config["default_size"]
 
-    data_transforms = transforms.Compose([transforms.Resize(target_size), transforms.ToTensor(), torch.flatten])
+    transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
+    if flatten:
+        transform_list.append(torch.flatten)
+    data_transforms = transforms.Compose(transform_list)
 
     dataset_class = config["class"]
 
@@ -266,9 +278,7 @@ def save_original_indices(
     original_indices: np.ndarray,
     output_dir: Path | str,
     sample_size: int,
-    timestamp: str,
     split: str | None = None,
-    set_type: str = "test",
 ) -> Path:
     """
     Save original dataset indices to a text file.
@@ -295,16 +305,20 @@ def save_original_indices(
     dataset_name_safe = dataset_name.lower().replace("-", "_")
 
     if split:
-        filename = f"original_{dataset_name_safe}_indices_{split}_nsample_{sample_size}_{timestamp}.txt"
-        header = f"Original {dataset_name} {split} indices for balanced sample"
+        filename = f"{dataset_name_safe}_indices_{split}_nsample_{sample_size}.txt"
+        header = f"{dataset_name} {split} indices (n_sample={sample_size})"
     else:
-        filename = f"original_{dataset_name_safe}_indices_nsample_{sample_size}_{timestamp}.txt"
-        header = f"Original {dataset_name} {set_type} indices for balanced sample (n_sample={sample_size})"
+        filename = f"{dataset_name_safe}_indices_nsample_{sample_size}.txt"
+        header = f"{dataset_name} indices (n_sample={sample_size})"
 
     indices_file = output_dir / filename
 
     np.savetxt(indices_file, original_indices, fmt="%d", header=header)
-    logging.info(f"Saved original {dataset_name} indices to {indices_file}")
+
+    if not indices_file.exists():
+        raise OSError(f"Failed to write indices file: {indices_file}")
+
+    logging.info(f"Saved {dataset_name} indices to {indices_file}")
 
     return indices_file
 
