@@ -1,9 +1,7 @@
 import contextlib
 import logging
-import os
 import time
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -20,6 +18,7 @@ from ada_verona import (
     PredictionsBasedSampler,
     PytorchExperimentDataset,
     create_distribution,
+    create_experiment_directory,
     get_balanced_sample,
     get_dataset_dir,
     get_models_dir,
@@ -29,6 +28,7 @@ from ada_verona import (
     log_classifier_metrics,
     log_verona_experiment_summary,
     log_verona_results,
+    save_original_indices,
 )
 
 logger.setup_logging(level=logging.INFO)
@@ -38,11 +38,10 @@ logging.getLogger("comet_ml").setLevel(logging.INFO)
 
 
 def main():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Log experiment start time
     start_time = time.time()
 
-    # ---------------------------------------Basic Experiment Settings -----------------------------------------
+    # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
+    experiment_type = "experiment_refactor_test"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
@@ -53,29 +52,26 @@ def main():
     sample_correct_predictions = True
     sample_stratified = False
 
-    experiment_type = "experiment_refactor_test"  # Experiment type for tracking
-    models_experiment_type = "experiment_refactor_test"  # Directory to load models from
-
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
     epsilon_stop = 0.5
     epsilon_step = 8 / 255
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
-    MODELS_DIR = get_models_dir(dataset_name) / models_experiment_type  # Load models from sdp_verification directory
+    MODELS_DIR = get_models_dir(dataset_name) / experiment_type
     RESULTS_DIR = get_results_dir()
 
     # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
     comet_tracker = CometTracker(project_name="rs-rd", auto_login=True)
 
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
-    experiment_dir_name = (
-        f"adv_attack_{dataset_name}_{sample_size}_"
-        f"sample_correct_{sample_correct_predictions}_"
-        f"sample_stratified_{sample_stratified}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    experiment_repository_path = create_experiment_directory(
+        results_dir=RESULTS_DIR,
+        experiment_type=experiment_type,
+        dataset_name=dataset_name,
+        timestamp=timestamp,
     )
-    experiment_repository_path = Path(RESULTS_DIR) / experiment_dir_name
-    os.makedirs(experiment_repository_path, exist_ok=True)
     # networks are loaded from this object
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
@@ -186,15 +182,14 @@ def main():
     experiment_repository.initialize_new_experiment(first_attack_name)
 
     # ----------------------------------------SAVE ORIGINAL DATASET INDICES----------------------------------------
-    indices_file = (
-        experiment_repository.get_act_experiment_path()
-        / f"original_{dataset_name}_indices_{split}_nsample_{sample_size}_{timestamp}.txt"
+    indices_file = save_original_indices(
+        dataset_name=dataset_name,
+        original_indices=original_indices,
+        output_dir=experiment_repository.get_act_experiment_path(),
+        sample_size=sample_size,
+        timestamp=timestamp,
+        split=split,
     )
-
-    np.savetxt(
-        indices_file, original_indices, fmt="%d", header=f"Original CIFAR-10 {split} indices for balanced sample"
-    )
-    logging.info(f"Saved original {dataset_name} indices to {indices_file}")
 
     # Log indices file to Comet ML
     comet_tracker.log_asset(indices_file)
