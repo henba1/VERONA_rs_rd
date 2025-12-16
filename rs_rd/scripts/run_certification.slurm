@@ -14,11 +14,6 @@ echo "Node: $SLURM_NODELIST"
 echo "Start Time: $(date)"
 echo "Working Directory: $(pwd)"
 
-CLASSIFIER=$(echo "${2:-cifar10}" | tr -c '[:alnum:]_-' '_')
-DATASET=$(echo "${1:-default}" | tr -c '[:alnum:]_-' '_')
-JOB_NAME="${CLASSIFIER}_certification_${DATASET}"
-scontrol update job=$SLURM_JOB_ID name=$JOB_NAME 2>/dev/null || echo "Could not update job name to $JOB_NAME"
-
 echo "Loaded modules:"
 module list 2>&1
 
@@ -51,13 +46,6 @@ SAMPLE_CORRECT_PREDICTIONS=${11:-True}
 STRATIFIED=${12:-True}
 
 
-# Validate dataset
-if [[ "$DATASET" != "cifar10" && "$DATASET" != "mnist" && "$DATASET" != "imagenet" ]]; then
-    echo "Error: Unsupported dataset '$DATASET'"
-    echo "Supported datasets: cifar10, mnist, imagenet"
-    exit 1
-fi
-
 python certify.py \
     --sigma $SIGMA \
     --sample_size $SAMPLE_SIZE \
@@ -69,7 +57,8 @@ python certify.py \
     --random_seed $RANDOM_SEED \
     --stratified $STRATIFIED \
     --classifier_type $CLASSIFIER_TYPE \
-    --classifier_name "$CLASSIFIER_NAME"
+    --classifier_name "$CLASSIFIER_NAME" \
+    --dataset_name "$DATASET"
 
 # Print completion information
 echo "Job completed at: $(date)"
