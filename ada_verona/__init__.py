@@ -114,8 +114,11 @@ try:
     log_verona_results = comet_tracker.log_verona_results
 
     create_distribution = experiment_utils.create_distribution
+    create_experiment_directory = experiment_utils.create_experiment_directory
     get_balanced_sample = experiment_utils.get_balanced_sample
     get_sample = experiment_utils.get_sample
+    get_dataset_config = experiment_utils.get_dataset_config
+    save_original_indices = experiment_utils.save_original_indices
     load_networks_from_directory = experiment_utils.load_networks_from_directory
 
     get_dataset_dir = paths.get_dataset_dir
@@ -130,8 +133,11 @@ except (ImportError, AttributeError):
     log_verona_experiment_summary = None
     log_verona_results = None
     create_distribution = None
+    create_experiment_directory = None
     get_balanced_sample = None
     get_sample = None
+    get_dataset_config = None
+    save_original_indices = None
     get_dataset_dir = None
     get_models_dir = None
     get_results_dir = None
@@ -185,8 +191,11 @@ __all__ = [
     "log_verona_experiment_summary",
     "log_verona_results",
     "create_distribution",
+    "create_experiment_directory",
     "get_balanced_sample",
     "get_sample",
+    "get_dataset_config",
+    "save_original_indices",
     "get_dataset_dir",
     "get_models_dir",
     "get_results_dir",
