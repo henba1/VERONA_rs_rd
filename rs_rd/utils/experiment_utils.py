@@ -240,17 +240,21 @@ def create_experiment_directory(
     experiment_type: str,
     dataset_name: str,
     timestamp: str | None = None,
+    classifier_name: str | None = None,
 ) -> Path:
     """
     Create an experiment directory with standardized naming convention.
 
-    The directory name follows the pattern: experiment_type_dataset_name_timestamp
+    The directory name follows the pattern:
+    - If classifier_name is provided: experiment_type_dataset_name_classifier_name_timestamp
+    - Otherwise: experiment_type_dataset_name_timestamp
 
     Args:
         results_dir: Base results directory where experiment folder will be created
         experiment_type: Type of experiment (e.g., "adv_attack", "certification")
         dataset_name: Name of the dataset (e.g., "CIFAR-10", "MNIST")
         timestamp: Optional timestamp string. If None, will be generated.
+        classifier_name: Optional classifier name to include in directory name for distinction.
 
     Returns:
         Path to the created experiment directory
@@ -263,10 +267,15 @@ def create_experiment_directory(
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Create safe dataset name (lowercase, dashes replaced with underscores)
     dataset_name_safe = dataset_name.lower().replace("-", "_")
 
-    experiment_dir_name = f"{experiment_type}_{dataset_name_safe}_{timestamp}"
+    name_parts = [experiment_type, dataset_name_safe]
+    if classifier_name is not None:
+        classifier_name_safe = classifier_name.lower().replace("/", "_").replace("-", "_")
+        name_parts.append(classifier_name_safe)
+    name_parts.append(timestamp)
+
+    experiment_dir_name = "_".join(name_parts)
     experiment_dir_path = results_dir / experiment_dir_name
     experiment_dir_path.mkdir(parents=True, exist_ok=True)
 
