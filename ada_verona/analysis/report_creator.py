@@ -26,11 +26,15 @@ sns.set_palette(sns.color_palette("Paired"))
 
 
 class ReportCreator:
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, custom_colors: dict[str, str] | None = None):
         self.df = df
+        self.custom_colors = custom_colors
 
     def create_hist_figure(self) -> plt.Figure:
-        hist_plot = sns.histplot(data=self.df, x="epsilon_value", hue="network", multiple="stack")
+        kwargs = {}
+        if self.custom_colors is not None:
+            kwargs["palette"] = self.custom_colors
+        hist_plot = sns.histplot(data=self.df, x="epsilon_value", hue="network", multiple="stack", **kwargs)
         figure = hist_plot.get_figure()
 
         plt.close()
@@ -38,7 +42,10 @@ class ReportCreator:
         return figure
 
     def create_box_figure(self) -> plt.Figure:
-        box_plot = sns.boxplot(data=self.df, x="network", y="epsilon_value")
+        kwargs = {}
+        if self.custom_colors is not None:
+            kwargs["palette"] = self.custom_colors
+        box_plot = sns.boxplot(data=self.df, x="network", y="epsilon_value", **kwargs)
         box_plot.set_xticklabels(box_plot.get_xticklabels(), rotation=90)
 
         figure = box_plot.get_figure()
@@ -48,7 +55,10 @@ class ReportCreator:
         return figure
 
     def create_kde_figure(self) -> plt.Figure:
-        kde_plot = sns.kdeplot(data=self.df, x="epsilon_value", hue="network", multiple="stack")
+        kwargs = {}
+        if self.custom_colors is not None:
+            kwargs["palette"] = self.custom_colors
+        kde_plot = sns.kdeplot(data=self.df, x="epsilon_value", hue="network", multiple="stack", **kwargs)
 
         figure = kde_plot.get_figure()
 
@@ -57,7 +67,10 @@ class ReportCreator:
         return figure
 
     def create_ecdf_figure(self) -> plt.Figure:
-        ecdf_plot = sns.ecdfplot(data=self.df, x="epsilon_value", hue="network")
+        kwargs = {}
+        if self.custom_colors is not None:
+            kwargs["palette"] = self.custom_colors
+        ecdf_plot = sns.ecdfplot(data=self.df, x="epsilon_value", hue="network", **kwargs)
 
         figure = ecdf_plot.get_figure()
 
@@ -67,12 +80,16 @@ class ReportCreator:
 
     def create_anneplot(self):
         df = self.df
-        for network in df.network.unique():
-            df = df.sort_values(by="epsilon_value")
-            cdf_x = np.linspace(0, 1, len(df))
-            plt.plot(df.epsilon_value, cdf_x, label=network)
-            plt.fill_betweenx(cdf_x, df.epsilon_value, df.smallest_sat_value, alpha=0.3)
-            plt.xlim(0, 0.35)
+        networks = df.network.unique()
+        for _idx, network in enumerate(networks):
+            network_df = df[df.network == network].sort_values(by="epsilon_value")
+            cdf_x = np.linspace(0, 1, len(network_df))
+            color = None
+            if self.custom_colors is not None and network in self.custom_colors:
+                color = self.custom_colors[network]
+            plt.plot(network_df.epsilon_value, cdf_x, label=network, color=color)
+            plt.fill_betweenx(cdf_x, network_df.epsilon_value, network_df.smallest_sat_value, alpha=0.3, color=color)
+            plt.xlim(0, 4)
             plt.xlabel("Epsilon values")
             plt.ylabel("Fraction critical epsilon values found")
             plt.legend()

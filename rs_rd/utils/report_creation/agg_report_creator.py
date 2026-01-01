@@ -1,13 +1,10 @@
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from paths import get_results_dir
-
+from ada_verona import get_results_dir
 from ada_verona.analysis.report_creator import ReportCreator
 from ada_verona.analysis.report_creator_verifier import ReportCreatorVerifier
 
@@ -19,6 +16,7 @@ def generate_verifier_comparison_plots(
     dataset_name: str,
     output_dir: str | None = None,
     hue_by: str = "verifier",
+    custom_colors: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """
     Generate verifier or network comparison plots from multiple dataframes and save them.
@@ -53,10 +51,10 @@ def generate_verifier_comparison_plots(
     # Choose the appropriate report creator based on hue_by parameter
     if hue_by == "network":
         logger.info("Generating network comparison plots for %s", dataset_name)
-        report_creator = ReportCreator(concatenated_df)
+        report_creator = ReportCreator(concatenated_df, custom_colors=custom_colors)
     elif hue_by == "verifier":
         logger.info("Generating verifier comparison plots for %s", dataset_name)
-        report_creator = ReportCreatorVerifier(dataframes)
+        report_creator = ReportCreatorVerifier(dataframes, custom_colors=custom_colors)
     else:
         raise ValueError(f"Invalid hue_by value: {hue_by}. Must be 'network' or 'verifier'.")
 

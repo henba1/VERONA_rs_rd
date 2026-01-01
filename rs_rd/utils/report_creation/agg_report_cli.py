@@ -60,6 +60,18 @@ def main() -> None:
             "each label will overwrite the corresponding CSV's value in the chosen hue column."
         ),
     )
+    parser.add_argument(
+        "--custom-colors",
+        nargs="*",
+        type=str,
+        default=None,
+        help=(
+            "Optional custom colors for the hue values. "
+            "If provided, must have the same length as --custom-labels (or number of CSV paths if no custom labels). "
+            "Colors can be specified as hex codes (e.g., '#9b59b6'), named colors (e.g., 'purple'), or RGB tuples. "
+            "Each color will be mapped to the corresponding label in order."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -71,6 +83,17 @@ def main() -> None:
             len(args.csv_paths),
         )
         sys.exit(1)
+
+    # Validate custom colors, if any
+    if args.custom_colors is not None:
+        num_labels = len(args.custom_labels) if args.custom_labels is not None else len(args.csv_paths)
+        if len(args.custom_colors) != num_labels:
+            logger.error(
+                "Number of --custom-colors (%d) must match number of labels (%d)",
+                len(args.custom_colors),
+                num_labels,
+            )
+            sys.exit(1)
 
     logger.info("Loading %d CSV file(s)", len(args.csv_paths))
     dataframes: list[pd.DataFrame] = []
@@ -101,6 +124,30 @@ def main() -> None:
         logger.error("No dataframes loaded. Exiting.")
         sys.exit(1)
 
+    # Build color mapping if custom colors are provided
+    custom_color_map = None
+    if args.custom_colors is not None:
+        if args.custom_labels is not None:
+            # Use custom labels if provided
+            labels = args.custom_labels
+        else:
+            # Otherwise, get unique hue values from each dataframe
+            labels = []
+            for df in dataframes:
+                hue_col = args.hue_by
+                if hue_col in df.columns:
+                    unique_values = df[hue_col].unique()
+                    if len(unique_values) > 0:
+                        labels.append(unique_values[0])
+                    else:
+                        logger.warning("No values found in hue column '%s' for one of the dataframes", hue_col)
+                        labels.append(f"unknown_{len(labels)}")
+                else:
+                    logger.warning("Hue column '%s' not found in one of the dataframes", hue_col)
+                    labels.append(f"unknown_{len(labels)}")
+        custom_color_map = dict(zip(labels, args.custom_colors, strict=True))
+        logger.info("Using custom color mapping: %s", custom_color_map)
+
     # Generate comparison plots
     logger.info("Generating comparison plots for %d dataset(s)", len(dataframes))
     try:
@@ -109,6 +156,7 @@ def main() -> None:
             dataset_name=args.dataset,
             output_dir=args.output_dir,
             hue_by=args.hue_by,
+            custom_colors=custom_color_map,
         )
         logger.info("Successfully generated all plots:")
         for plot_name, plot_path in plot_paths.items():
