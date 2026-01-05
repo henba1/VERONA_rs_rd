@@ -30,6 +30,8 @@ DATASET=${1:-"CIFAR-10"}
 OUTPUT_DIR=${2:-"/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/plots"}
 HUE_BY=${3:-"network"}  #"network" or "verifier"
 
+
+#use below as template when not using compile_by_tag.py (e.g. when comparing accross different tags)
 CSV_FILES=(
     "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_vit_base_patch16_224_in21k_finetuned_cifar10_20251223_163234_711830/result_df.csv"
     "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_vit_base_patch16_224_in21k_finetuned_cifar10_20251223_163234_709977/result_df.csv"
