@@ -159,6 +159,7 @@ def generate_verifier_comparison_plots(
     custom_colors: dict[str, str] | None = None,
     experiment_dirs: list[Path] | None = None,
     custom_labels: list[str] | None = None,
+    concatenated_df_filename: str | None = None,
 ) -> dict[str, Path]:
     """
     Generate verifier or network comparison plots from multiple dataframes and save them.
@@ -168,6 +169,8 @@ def generate_verifier_comparison_plots(
         dataset_name: Name of the dataset (used for directory structure/logging).
         output_dir: Optional custom output directory. If None, uses RESULTS_DIR/dataset_name.
         hue_by: Column to use for hue/grouping in plots: 'network' or 'verifier' (default: 'verifier').
+        concatenated_df_filename: Optional custom filename for concatenated dataframe (without .csv extension).
+                                 If None, uses default timestamp-based filename.
 
     Returns:
         Dictionary mapping plot names to their file paths, plus a 'concatenated_dataframe' CSV path.
@@ -186,7 +189,10 @@ def generate_verifier_comparison_plots(
 
     # Concatenate dataframes and save
     concatenated_df = pd.concat(dataframes, ignore_index=True)
-    df_path = output_dir / f"{base_filename}_concatenated_results.csv"
+    if concatenated_df_filename is not None:
+        df_path = output_dir / f"{concatenated_df_filename}.csv"
+    else:
+        df_path = output_dir / f"{base_filename}_concatenated_results.csv"
     concatenated_df.to_csv(df_path, index=False)
     logger.info("Saved concatenated dataframe to %s", df_path)
 

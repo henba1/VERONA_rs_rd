@@ -205,12 +205,6 @@ def compile_dataframes_by_tag(
                 df[hue_col] = label
             logger.info("Applied custom labels to dataframes")
 
-    # Concatenate all dataframes and save
-    compiled_df = pd.concat(dataframes, ignore_index=True)
-    compiled_csv_path = output_dir / f"{experiment_tag}_{df_name}_compiled.csv"
-    compiled_df.to_csv(compiled_csv_path, index=False)
-    logger.info("Saved compiled dataframe to %s", compiled_csv_path)
-
     logger.info("Generating comparison plots for %d dataset(s)", len(dataframes))
     try:
         # Build color mapping if custom colors are provided
@@ -242,6 +236,7 @@ def compile_dataframes_by_tag(
             custom_colors=custom_color_map,
             experiment_dirs=loaded_dirs,
             custom_labels=custom_labels,
+            concatenated_df_filename=f"{experiment_tag}_{df_name}_compiled",
         )
         logger.info("Successfully generated all plots:")
         for plot_name, plot_path in plot_paths.items():
