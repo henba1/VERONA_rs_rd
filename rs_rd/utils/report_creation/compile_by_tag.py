@@ -205,45 +205,55 @@ def compile_dataframes_by_tag(
                 df[hue_col] = label
             logger.info("Applied custom labels to dataframes")
 
-    logger.info("Generating comparison plots for %d dataset(s)", len(dataframes))
-    try:
-        # Build color mapping if custom colors are provided
-        custom_color_map = None
-        if custom_colors is not None:
-            if custom_labels is not None:
-                labels = custom_labels
-            else:
-                # Extract labels from dataframes
-                labels = []
-                for df in dataframes:
-                    hue_col = hue_by
-                    if hue_col in df.columns:
-                        unique_values = df[hue_col].unique()
-                        if len(unique_values) > 0:
-                            labels.append(str(unique_values[0]))
+    # Concatenate and save the dataframe (always done, regardless of plot generation)
+    compiled_df = pd.concat(dataframes, ignore_index=True)
+    compiled_csv_path = output_dir / f"{experiment_tag}_{df_name}_compiled.csv"
+    compiled_df.to_csv(compiled_csv_path, index=False)
+    logger.info("Saved compiled dataframe to %s (%d rows)", compiled_csv_path, len(compiled_df))
+
+    if generate_plots:
+        logger.info("Generating comparison plots for %d dataset(s)", len(dataframes))
+        try:
+            # Build color mapping if custom colors are provided
+            custom_color_map = None
+            if custom_colors is not None:
+                if custom_labels is not None:
+                    labels = custom_labels
+                else:
+                    # Extract labels from dataframes
+                    labels = []
+                    for df in dataframes:
+                        hue_col = hue_by
+                        if hue_col in df.columns:
+                            unique_values = df[hue_col].unique()
+                            if len(unique_values) > 0:
+                                labels.append(str(unique_values[0]))
+                            else:
+                                labels.append(f"unknown_{len(labels)}")
                         else:
                             labels.append(f"unknown_{len(labels)}")
-                    else:
-                        labels.append(f"unknown_{len(labels)}")
-            custom_color_map = dict(zip(labels, custom_colors, strict=True))
-            logger.info("Using custom color mapping: %s", custom_color_map)
+                custom_color_map = dict(zip(labels, custom_colors, strict=True))
+                logger.info("Using custom color mapping: %s", custom_color_map)
 
-        plot_paths = generate_verifier_comparison_plots(
-            dataframes=dataframes,
-            dataset_name=dataset_name,
-            output_dir=output_dir,
-            hue_by=hue_by,
-            custom_colors=custom_color_map,
-            experiment_dirs=loaded_dirs,
-            custom_labels=custom_labels,
-            concatenated_df_filename=f"{experiment_tag}_{df_name}_compiled",
-        )
-        logger.info("Successfully generated all plots:")
-        for plot_name, plot_path in plot_paths.items():
-            logger.info("  %s: %s", plot_name, plot_path)
-    except Exception as e:
-        logger.error("Failed to generate plots: %s", e)
-        raise
+            plot_paths = generate_verifier_comparison_plots(
+                dataframes=dataframes,
+                dataset_name=dataset_name,
+                output_dir=output_dir,
+                hue_by=hue_by,
+                custom_colors=custom_color_map,
+                experiment_dirs=loaded_dirs,
+                custom_labels=custom_labels,
+                concatenated_df_filename=f"{experiment_tag}_{df_name}_compiled",
+                save_dataframe=False,  # Already saved above
+            )
+            logger.info("Successfully generated all plots:")
+            for plot_name, plot_path in plot_paths.items():
+                logger.info("  %s: %s", plot_name, plot_path)
+        except Exception as e:
+            logger.error("Failed to generate plots: %s", e)
+            raise
+    else:
+        logger.info("Skipping plot generation (--no-plots flag set)")
 
     return dataframes, loaded_dirs
 

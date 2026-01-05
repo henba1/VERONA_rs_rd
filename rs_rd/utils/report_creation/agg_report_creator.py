@@ -160,6 +160,7 @@ def generate_verifier_comparison_plots(
     experiment_dirs: list[Path] | None = None,
     custom_labels: list[str] | None = None,
     concatenated_df_filename: str | None = None,
+    save_dataframe: bool = True,
 ) -> dict[str, Path]:
     """
     Generate verifier or network comparison plots from multiple dataframes and save them.
@@ -171,6 +172,7 @@ def generate_verifier_comparison_plots(
         hue_by: Column to use for hue/grouping in plots: 'network' or 'verifier' (default: 'verifier').
         concatenated_df_filename: Optional custom filename for concatenated dataframe (without .csv extension).
                                  If None, uses default timestamp-based filename.
+        save_dataframe: Whether to save the concatenated dataframe. Default True for backward compatibility.
 
     Returns:
         Dictionary mapping plot names to their file paths, plus a 'concatenated_dataframe' CSV path.
@@ -187,14 +189,23 @@ def generate_verifier_comparison_plots(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_filename = f"compiled_results_{timestamp}"
 
-    # Concatenate dataframes and save
+    # Concatenate dataframes
     concatenated_df = pd.concat(dataframes, ignore_index=True)
-    if concatenated_df_filename is not None:
-        df_path = output_dir / f"{concatenated_df_filename}.csv"
+
+    # Save dataframe if requested
+    if save_dataframe:
+        if concatenated_df_filename is not None:
+            df_path = output_dir / f"{concatenated_df_filename}.csv"
+        else:
+            df_path = output_dir / f"{base_filename}_concatenated_results.csv"
+        concatenated_df.to_csv(df_path, index=False)
+        logger.info("Saved concatenated dataframe to %s", df_path)
     else:
-        df_path = output_dir / f"{base_filename}_concatenated_results.csv"
-    concatenated_df.to_csv(df_path, index=False)
-    logger.info("Saved concatenated dataframe to %s", df_path)
+        # Still determine df_path for return value, but don't save
+        if concatenated_df_filename is not None:
+            df_path = output_dir / f"{concatenated_df_filename}.csv"
+        else:
+            df_path = output_dir / f"{base_filename}_concatenated_results.csv"
 
     # Choose the appropriate report creator based on hue_by parameter
     if hue_by == "network":
@@ -277,5 +288,8 @@ def generate_verifier_comparison_plots(
             plot_paths["classifier_accuracy"] = accuracy_plot_path
 
     plot_paths["concatenated_dataframe"] = df_path
-    logger.info("All plots and concatenated dataframe saved to %s", output_dir)
+    if save_dataframe:
+        logger.info("All plots and concatenated dataframe saved to %s", output_dir)
+    else:
+        logger.info("All plots saved to %s", output_dir)
     return plot_paths
