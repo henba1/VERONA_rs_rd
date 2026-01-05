@@ -31,15 +31,15 @@ OUTPUT_DIR=${2:-"/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/plots"}
 HUE_BY=${3:-"network"}  #"network" or "verifier"
 
 CSV_FILES=(
-    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_resnet_4b_standard_20251223_164457_623440/result_df.csv"
-    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_resnet_4b_standard_20251223_164457_571387/result_df.csv"
-    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_resnet_4b_standard_20251223_164506_023939/result_df.csv"
+    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_vit_base_patch16_224_in21k_finetuned_cifar10_20251223_163234_711830/result_df.csv"
+    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_vit_base_patch16_224_in21k_finetuned_cifar10_20251223_163234_709977/result_df.csv"
+    "/gpfs/work2/0/prjs1681/runs/results/CIFAR-10/certification_cifar_10_vit_base_patch16_224_in21k_finetuned_cifar10_20251223_163244_883647/result_df.csv"
 
 )
 CUSTOM_LABELS=(
-    "rs_resnet_4b_standard_0.25"
-    "rs_resnet_4b_standard_0.5"
-    "rs_resnet_4b_standard_1"
+    "rs_ViT-B/16_0.25"
+    "rs_ViT-B/16_0.5"
+    "rs_ViT-B/16_1"
 )
 CUSTOM_COLORS=(
     "#d7bde2"
