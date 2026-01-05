@@ -47,6 +47,7 @@ def main():
     split = "test"
     sample_size = 5
     random_seed = 42
+    experiment_tag = "pgd_vs_foolbox_pgd"
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
     use_identity_sampler = False
     sample_correct_predictions = True
@@ -71,6 +72,7 @@ def main():
         experiment_type=experiment_type,
         dataset_name=dataset_name,
         timestamp=timestamp,
+        experiment_tag=experiment_tag,
     )
     # networks are loaded from this object
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
@@ -242,6 +244,7 @@ def main():
             comet_tracker.start_experiment(
                 experiment_name=f"rs_rd_{attack_name}_CIFAR-10_{timestamp}",
                 tags=[experiment_type, dataset_name, attack_name, epsilon_tag, *model_names],
+                experiment_tag=experiment_tag,
             )
 
             # Log attack-specific parameters

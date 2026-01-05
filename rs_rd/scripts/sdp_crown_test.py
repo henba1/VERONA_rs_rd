@@ -46,6 +46,7 @@ def main():
     split = "test"
     sample_size = 10
     random_seed = 42
+    experiment_tag = None  # Optional: set to a string like "sdp_verification" to tag experiments
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
     use_identity_sampler = False
     sample_correct_predictions = True
@@ -106,6 +107,7 @@ def main():
     comet_tracker.start_experiment(
         experiment_name=f"rs_rd_{experiment_type}_{dataset_name}_{timestamp}",
         tags=[experiment_type, dataset_name, experiment_name, epsilon_tag, *model_names],
+        experiment_tag=experiment_tag,
     )
     experiment_repository.initialize_new_experiment(experiment_name)
 

@@ -75,19 +75,25 @@ class CometTracker:
             logging.warning(f"Comet ML login failed: {e}")
             return False
 
-    def start_experiment(self, experiment_name: str, tags: list[str] | None = None) -> bool:
+    def start_experiment(
+        self, experiment_name: str, tags: list[str] | None = None, experiment_tag: str | None = None
+    ) -> bool:
         """
         Start a new Comet ML experiment.
 
         Args:
             experiment_name: Name for the experiment
             tags: Optional list of tags for the experiment
+            experiment_tag: Optional experiment tag to add to tags list
 
         Returns:
             bool: True if experiment started successfully, False otherwise
         """
         if tags is None:
             tags = []
+
+        if experiment_tag is not None:
+            tags = [experiment_tag, *tags]
 
         experiment_config = comet_ml.ExperimentConfig(
             name=experiment_name,

@@ -241,11 +241,13 @@ def create_experiment_directory(
     dataset_name: str,
     timestamp: str | None = None,
     classifier_name: str | None = None,
+    experiment_tag: str | None = None,
 ) -> Path:
     """
     Create an experiment directory with standardized naming convention.
 
     The directory name follows the pattern:
+    - If experiment_tag is provided: experiment_tag_experiment_type_dataset_name_classifier_name_timestamp
     - If classifier_name is provided: experiment_type_dataset_name_classifier_name_timestamp
     - Otherwise: experiment_type_dataset_name_timestamp
 
@@ -255,6 +257,7 @@ def create_experiment_directory(
         dataset_name: Name of the dataset (e.g., "CIFAR-10", "MNIST")
         timestamp: Optional timestamp string. If None, will be generated.
         classifier_name: Optional classifier name to include in directory name for distinction.
+        experiment_tag: Optional experiment tag to prepend to directory name for identification.
 
     Returns:
         Path to the created experiment directory
@@ -269,7 +272,11 @@ def create_experiment_directory(
 
     dataset_name_safe = dataset_name.lower().replace("-", "_")
 
-    name_parts = [experiment_type, dataset_name_safe]
+    name_parts = []
+    if experiment_tag is not None:
+        experiment_tag_safe = experiment_tag.lower().replace("-", "_").replace(" ", "_")
+        name_parts.append(experiment_tag_safe)
+    name_parts.extend([experiment_type, dataset_name_safe])
     if classifier_name is not None:
         classifier_name_safe = classifier_name.lower().replace("/", "_").replace("-", "_")
         name_parts.append(classifier_name_safe)
