@@ -41,13 +41,13 @@ def main():
     start_time = time.time()
 
     # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
-    experiment_type = "experiment_refactor_test"
+    experiment_type = "pgd_vs_foolbox_pgd"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
     sample_size = 5
     random_seed = 42
-    experiment_tag = "pgd_vs_foolbox_pgd"
+    experiment_tag = experiment_type
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
     use_identity_sampler = False
     sample_correct_predictions = True
