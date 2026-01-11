@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import sys
 import time
 from collections import OrderedDict
@@ -158,15 +159,15 @@ def main():
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 10
+    sample_size = 200
     random_seed = 5432
-    experiment_tag = None  # Optional: set to a string like "sdp_verification" to tag experiments
-    # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
+
     use_identity_sampler = False
     sample_correct_predictions = True
     sample_stratified = False
 
     experiment_type = "sdp_verification"
+    experiment_tag = experiment_type
     experiment_name = "sdp_crown_test"
 
     # ----------------------------------------VERIFIER CONFIGURATION------------------------------------------
@@ -235,8 +236,6 @@ def main():
             "sample_correct_predictions": sample_correct_predictions,
             "experiment_type": experiment_type,
             "experiment_name": experiment_name,
-            "attack_norm": "l2",
-            "attack_iterations": 40,
             "epsilon_start": epsilon_start,
             "epsilon_stop": epsilon_stop,
             "epsilon_step": epsilon_step,
@@ -344,145 +343,31 @@ def main():
     logging.info(f"  CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not set')}")
     logging.info(f"  CONDA_DEFAULT_ENV: {os.environ.get('CONDA_DEFAULT_ENV', 'Not set')}")
 
-    # Check if SDP-CROWN conda environment exists
-    sdp_crown_env = "__av__sdpcrown"
-    conda_path = os.environ.get("CONDA_EXE", "")
-    if conda_path:
-        logging.info(f"  Conda path: {conda_path}")
-        # Try to check if environment exists
-        import subprocess
-
-        try:
-            result = subprocess.run(
-                ["conda", "env", "list"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if sdp_crown_env in result.stdout:
-                logging.info(f"  ✓ SDP-CROWN conda environment '{sdp_crown_env}' found")
-            else:
-                logging.warning(f"  ✗ SDP-CROWN conda environment '{sdp_crown_env}' not found")
-                logging.warning(f"  Available environments:\n{result.stdout}")
-        except Exception as e:
-            logging.warning(f"  Could not check conda environments: {e}")
-
-    # Log memory usage before starting verification
     try:
-        import psutil
-
-        process = psutil.Process()
-        mem_info = process.memory_info()
-        logging.info(f"Memory usage before verification: {mem_info.rss / 1024**3:.2f} GB")
-    except ImportError:
-        logging.info("psutil not available, skipping memory check")
-
-    # Test subprocess spawning before actual verification
-    logging.info("Testing subprocess spawning capability...")
-    try:
-        test_result = subprocess.run(
-            ["echo", "Subprocess test successful"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        logging.info("Starting robustness verification...")
+        create_distribution(
+            experiment_repository,
+            dataset,
+            dataset_sampler,
+            epsilon_value_estimator,
+            property_generator,
+            network_list=network_list,
         )
-        logging.info(f"  ✓ Basic subprocess test: {test_result.stdout.strip()}")
-    except Exception as e:
-        logging.error(f"  ✗ Basic subprocess test failed: {e}")
+        logging.info("Robustness verification completed successfully")
+    except KeyboardInterrupt:
+        logging.warning("Verification interrupted by user")
         raise
-
-    # Test conda activation in subprocess
-    logging.info("Testing conda activation in subprocess...")
-    try:
-        conda_source = "/gpfs/home2/jvrijn/miniforge3/etc/profile.d/conda.sh"
-        test_cmd = (
-            f"source {conda_source} && conda activate __av__sdpcrown && "
-            "python -c \"import sys; print(f'Python: {{sys.executable}}')\""
-        )
-        test_result = subprocess.run(
-            test_cmd,
-            shell=True,
-            executable="/bin/bash",
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if test_result.returncode == 0:
-            logging.info(f"  ✓ Conda activation test successful: {test_result.stdout.strip()}")
-        else:
-            logging.error(f"  ✗ Conda activation test failed (exit code {test_result.returncode})")
-            logging.error(f"    stdout: {test_result.stdout}")
-            logging.error(f"    stderr: {test_result.stderr}")
-    except Exception as e:
-        logging.error(f"  ✗ Conda activation test exception: {e}")
-
-    try:
-        logging.info("Calling create_distribution - this will spawn subprocesses for SDP-CROWN verification")
-        logging.info("Starting first verification call...")
-
-        # Add detailed logging for the first verification
-        if network_list:
-            network = network_list[0]
-            logging.info(f"  Processing network: {network.name}")
-            try:
-                sampled_data = dataset_sampler.sample(network, dataset)
-                logging.info(f"  Sampled {len(sampled_data)} data points")
-                if sampled_data:
-                    data_point = sampled_data[0]
-                    logging.info(f"  Creating verification context for first data point (ID: {data_point.id})...")
-                    verification_context = experiment_repository.create_verification_context(
-                        network, data_point, property_generator
-                    )
-                    logging.info(
-                        "  Verification context created. About to call "
-                        "compute_epsilon_value (this spawns subprocess)..."
-                    )
-                    logging.info(
-                        "  This will call SDP-CROWN verifier which spawns: "
-                        "conda activate __av__sdpcrown && python sdp_crown.py ..."
-                    )
-
-                    # This is where the subprocess gets spawned
-                    epsilon_value_result = epsilon_value_estimator.compute_epsilon_value(verification_context)
-                    logging.info(f"  ✓ First verification completed successfully: {epsilon_value_result}")
-            except Exception as e:
-                logging.error(f"  ✗ Error during first verification: {e}", exc_info=True)
-                raise
-
-        # If first verification succeeded, continue with full distribution
-        logging.info("First verification succeeded, continuing with full distribution...")
-        logging.info(f"Will process {len(network_list)} network(s) and {len(dataset)} data points")
-
-        try:
-            create_distribution(
-                experiment_repository,
-                dataset,
-                dataset_sampler,
-                epsilon_value_estimator,
-                property_generator,
-                network_list=network_list,
-            )
-            logging.info("Robustness verification completed successfully")
-        except KeyboardInterrupt:
-            logging.warning("Verification interrupted by user")
-            raise
-        except Exception as e:
-            logging.error(f"Error in create_distribution: {e}", exc_info=True)
-            raise
     except MemoryError as e:
         logging.error(f"Out of Memory error during verification: {e}")
-        logging.error("Consider reducing sample_size or epsilon_list size")
         raise
     except subprocess.SubprocessError as e:
         logging.error(f"Subprocess error during verification: {e}")
-        logging.error("This might indicate issues with conda environment activation or SLURM subprocess restrictions")
         raise
     except Exception as e:
         logging.error(f"Error during robustness verification: {e}", exc_info=True)
         raise
     results_path = experiment_repository.get_results_path()
 
-    # Log result files (image_id column now contains original CIFAR-10 indices)
     log_verona_results(comet_tracker, results_path)
     logging.info("Result files contain original dataset indices in the image_id column")
 
