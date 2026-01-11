@@ -6,25 +6,83 @@ VERONA experiments, including dataset sampling, configuration management,
 and distribution creation.
 """
 
+import importlib
+import importlib.util
 import logging
+import sys
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
-from ada_verona import (
-    DatasetSampler,
-    EpsilonValueEstimator,
-    ExperimentDataset,
-    ExperimentRepository,
-    Network,
-    ONNXNetwork,
-    PropertyGenerator,
-    PyTorchNetwork,
-)
+from ada_verona.database.dataset.experiment_dataset import ExperimentDataset
+from ada_verona.database.experiment_repository import ExperimentRepository
+from ada_verona.database.machine_learning_model.network import Network
+from ada_verona.database.machine_learning_model.onnx_network import ONNXNetwork
+from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNetwork
+from ada_verona.dataset_sampler.dataset_sampler import DatasetSampler
+from ada_verona.epsilon_value_estimator.epsilon_value_estimator import EpsilonValueEstimator
+from ada_verona.verification_module.property_generator.property_generator import PropertyGenerator
+
+
+class SDPCrownCIFAR10Preprocess:
+    """
+    Preprocessing transform for CIFAR-10 images used by SDP-CROWN.
+
+    Preprocessing used by the SDP paper:
+    - Normalizes images using SDP-CROWN specific means and standard deviations
+    - Expects input images in [0, 1] range (from ToTensor)
+    - Outputs normalized images ready for SDP-CROWN models
+    """
+
+    def __init__(self, inception_preprocess=False):
+        """
+        Args:
+            inception_preprocess: If True, uses inception-style preprocessing (2x - 1 scaling).
+                                 If False, uses standard SDP-CROWN preprocessing.
+        """
+        self.inception_preprocess = inception_preprocess
+        # SDP-CROWN normalization parameters
+        self.means = np.array([125.3, 123.0, 113.9], dtype=np.float32) / 255
+        self.std = np.array([0.225, 0.225, 0.225], dtype=np.float32)
+
+        if inception_preprocess:
+            # Use 2x - 1 to get [-1, 1]-scaled images
+            self.rescaled_means = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+            self.rescaled_devs = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+        else:
+            self.rescaled_means = self.means
+            self.rescaled_devs = self.std
+
+    def __call__(self, image):
+        """
+        Apply preprocessing to a single image tensor.
+
+        Args:
+            image: Tensor image in [0, 1] range with shape (C, H, W)
+
+        Returns:
+            Preprocessed image tensor
+        """
+        # Ensure we have a tensor
+        if not isinstance(image, torch.Tensor):
+            image = torch.tensor(image, dtype=torch.float32)
+
+        # Convert means and stds to tensors with proper shape for broadcasting
+        # Shape: (C,) -> (C, 1, 1) for broadcasting with (C, H, W) tensor
+        means_tensor = torch.tensor(self.rescaled_means, dtype=torch.float32).view(3, 1, 1)
+        stds_tensor = torch.tensor(self.rescaled_devs, dtype=torch.float32).view(3, 1, 1)
+
+        # Apply normalization: (image - mean) / std
+        # Image is in [0, 1] range from ToTensor
+        normalized = (image - means_tensor) / stds_tensor
+
+        return normalized
 
 
 def get_dataset_config():
@@ -45,7 +103,14 @@ def get_dataset_config():
 
 
 def get_balanced_sample(
-    dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None, flatten=True
+    dataset_name="CIFAR-10",
+    train_bool=True,
+    dataset_size=100,
+    dataset_dir=None,
+    seed=42,
+    image_size=None,
+    flatten=True,
+    sdpcrown_preprocess=False,
 ):
     """
     Get a balanced sample from a PyTorch dataset.
@@ -63,6 +128,8 @@ def get_balanced_sample(
                    MNIST: (28, 28), CIFAR-10: (32, 32), ImageNet: (224, 224)
         flatten: If True, flatten images to 1D tensors. If False, keep images as (C, H, W).
                  Default True for backwards compatibility.
+        sdpcrown_preprocess: If True, applies SDP-CROWN specific preprocessing for CIFAR-10.
+                            Only applies to CIFAR-10 dataset. Default False.
 
     Returns:
         tuple: (balanced_dataset, balanced_sample_idx)
@@ -84,6 +151,10 @@ def get_balanced_sample(
     target_size = image_size if image_size is not None else config["default_size"]
 
     transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
+
+    if sdpcrown_preprocess and dataset_name == "CIFAR-10":
+        transform_list.append(SDPCrownCIFAR10Preprocess(inception_preprocess=False))
+
     if flatten:
         transform_list.append(torch.flatten)
     data_transforms = transforms.Compose(transform_list)
@@ -112,7 +183,14 @@ def get_balanced_sample(
 
 
 def get_sample(
-    dataset_name="CIFAR-10", train_bool=True, dataset_size=100, dataset_dir=None, seed=42, image_size=None, flatten=True
+    dataset_name="CIFAR-10",
+    train_bool=True,
+    dataset_size=100,
+    dataset_dir=None,
+    seed=42,
+    image_size=None,
+    flatten=True,
+    sdpcrown_preprocess=False,
 ):
     """
     Get a random sample from a PyTorch dataset without stratification.
@@ -130,6 +208,8 @@ def get_sample(
                    MNIST: (28, 28), CIFAR-10: (32, 32), ImageNet: (224, 224)
         flatten: If True, flatten images to 1D tensors. If False, keep images as (C, H, W).
                  Default True for backwards compatibility.
+        sdpcrown_preprocess: If True, applies SDP-CROWN specific preprocessing for CIFAR-10.
+                            Only applies to CIFAR-10 dataset. Default False.
 
     Returns:
         tuple: (sampled_dataset, sample_idx)
@@ -151,6 +231,11 @@ def get_sample(
     target_size = image_size if image_size is not None else config["default_size"]
 
     transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
+
+    # Apply SDP-CROWN preprocessing for CIFAR-10 if requested
+    if sdpcrown_preprocess and dataset_name == "CIFAR-10":
+        transform_list.append(SDPCrownCIFAR10Preprocess(inception_preprocess=False))
+
     if flatten:
         transform_list.append(torch.flatten)
     data_transforms = transforms.Compose(transform_list)
@@ -214,6 +299,160 @@ def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], devi
                 logging.info(f"Loaded PyTorch model: {model_path.name}")
             except Exception as e:
                 logging.warning(f"Failed to load PyTorch model {model_path.name}: {e}")
+
+    return network_list
+
+
+def get_sdpcrown_models_module():
+    """
+    Get the SDP-CROWN models module, loading it if necessary.
+
+    Returns:
+        The SDP-CROWN models module containing architecture classes.
+
+    Raises:
+        ImportError: If the SDP-CROWN models module cannot be loaded.
+    """
+    try:
+        from autoverify.verifier import SDPCrown
+
+        tool_dir = SDPCrown().tool_path
+    except Exception:
+        tool_dir = Path.home() / ".local/share/autoverify/verifiers/sdpcrown/tool"
+
+    if str(tool_dir) not in sys.path:
+        sys.path.insert(0, str(tool_dir))
+
+    models_py = tool_dir / "models.py"
+    spec = importlib.util.spec_from_file_location("sdpcrown_models", models_py)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load SDP-CROWN models from {models_py}")
+    sdpcrown_models_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sdpcrown_models_module)
+
+    return sdpcrown_models_module
+
+
+def infer_sdpcrown_architecture(model_name: str, sdpcrown_models_module=None) -> nn.Module:
+    """
+    Infer PyTorch model architecture from model filename.
+
+    Args:
+        model_name: Model filename (without extension)
+        sdpcrown_models_module: Optional SDP-CROWN models module. If None, will be loaded automatically.
+
+    Returns:
+        Instantiated model architecture
+
+    Raises:
+        ImportError: If SDP-CROWN models module cannot be loaded.
+        ValueError: If architecture cannot be inferred from model name.
+    """
+    if sdpcrown_models_module is None:
+        sdpcrown_models_module = get_sdpcrown_models_module()
+
+    name = model_name.lower()
+
+    if "mnist" in name:
+        if "mlp" in name:
+            return sdpcrown_models_module.MNIST_MLP()
+        if "convsmall" in name:
+            return sdpcrown_models_module.MNIST_ConvSmall()
+        return sdpcrown_models_module.MNIST_ConvLarge()
+
+    if "cifar" in name or "cifar10" in name:
+        if "cnn_a" in name:
+            return sdpcrown_models_module.CIFAR10_CNN_A()
+        if "cnn_b" in name:
+            return sdpcrown_models_module.CIFAR10_CNN_B()
+        if "cnn_c" in name:
+            return sdpcrown_models_module.CIFAR10_CNN_C()
+        if "convsmall" in name:
+            return sdpcrown_models_module.CIFAR10_ConvSmall()
+        if "convdeep" in name:
+            return sdpcrown_models_module.CIFAR10_ConvDeep()
+        if "convlarge" in name or "conv_large" in name:
+            return sdpcrown_models_module.CIFAR10_ConvLarge()
+        # Default to ConvLarge for CIFAR-10
+        return sdpcrown_models_module.CIFAR10_ConvLarge()
+
+    raise ValueError(
+        f"Could not infer architecture from model name '{model_name}'. "
+        "Please use one of the known SDP-CROWN architectures."
+    )
+
+
+def load_sdpcrown_pytorch_model(model_path: Path, device: torch.device, sdpcrown_models_module=None) -> nn.Module:
+    """
+    Load a PyTorch model from a .pth file, handling both state_dict and full model objects.
+
+    Args:
+        model_path: Path to the .pth file
+        device: PyTorch device to load the model on
+        sdpcrown_models_module: Optional SDP-CROWN models module. If None, will be loaded automatically
+                                 when needed (only for state_dict files).
+
+    Returns:
+        Loaded PyTorch model
+
+    Raises:
+        ImportError: If SDP-CROWN models module cannot be loaded (when needed for state_dict).
+        ValueError: If checkpoint format is unsupported.
+    """
+    loaded = torch.load(model_path, map_location=device, weights_only=False)
+
+    # Check if loaded object is a state_dict (OrderedDict or dict)
+    if isinstance(loaded, (OrderedDict, dict)) and not isinstance(loaded, nn.Module):
+        # state_dict, need to instantiate model architecture first
+        logging.info(f"Detected state_dict in {model_path.name}, inferring architecture from filename")
+        if sdpcrown_models_module is None:
+            sdpcrown_models_module = get_sdpcrown_models_module()
+        model = infer_sdpcrown_architecture(model_path.stem, sdpcrown_models_module)
+        model.load_state_dict(loaded)
+    elif isinstance(loaded, nn.Module):
+        model = loaded
+    else:
+        raise ValueError(
+            f"Unsupported checkpoint format in {model_path}. "
+            "Expected either a state_dict (OrderedDict/dict) or a full model (nn.Module)."
+        )
+
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def sdp_crown_models_loading(models_dir: Path, input_shape: tuple[int], device: torch.device) -> list[Network]:
+    """
+    Load SDP-CROWN PyTorch models from a directory.
+
+    Args:
+        models_dir: Directory containing .pth model files
+        input_shape: Input shape tuple for PyTorch models (e.g., (1, 3, 32, 32))
+        device: PyTorch device to load models on
+
+    Returns:
+        List of PyTorchNetwork objects
+    """
+    sdpcrown_models_module = get_sdpcrown_models_module()
+
+    network_list: list[Network] = []
+    for model_path in sorted(models_dir.glob("*.pth")):
+        if not (model_path.exists() and (model_path.is_file() or model_path.is_symlink())):
+            continue
+        try:
+            model = load_sdpcrown_pytorch_model(model_path, device, sdpcrown_models_module)
+            network_list.append(
+                PyTorchNetwork(
+                    model=model,
+                    input_shape=input_shape,
+                    name=model_path.stem,
+                    path=model_path,
+                )
+            )
+            logging.info(f"Loaded SDP-CROWN PyTorch model: {model_path.name}")
+        except Exception as e:
+            logging.warning(f"Failed to load SDP-CROWN PyTorch model {model_path.name}: {e}")
 
     return network_list
 
