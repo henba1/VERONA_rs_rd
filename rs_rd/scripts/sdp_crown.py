@@ -15,7 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from autoverify.verifier import SDPCrown
 
 try:
-    sys.path.insert(0, str(Path.home() / ".local/share/autoverify/verifiers/sdpcrown"))
+    try:
+        sdp_crown_tool_dir = SDPCrown().tool_path
+    except Exception:
+        sdp_crown_tool_dir = Path.home() / ".local/share/autoverify/verifiers/sdpcrown/tool"
+    sys.path.insert(0, str(sdp_crown_tool_dir))
     from models import (
         CIFAR10_CNN_A,
         CIFAR10_CNN_B,
@@ -32,8 +36,9 @@ try:
 except ImportError as e:
     MODELS_AVAILABLE = False
     logging.warning(
-        f"Could not import SDP-CROWN models from {Path.home() / '.local/share/autoverify/verifiers/sdpcrown'}. "
-        f"State_dict loading will not work. Error: {e}"
+        "Could not import SDP-CROWN models from %s. State_dict loading will not work. Error: %s",
+        sdp_crown_tool_dir,
+        e,
     )
 
 import ada_verona.util.logger as logger
@@ -131,7 +136,7 @@ def load_pytorch_model(model_path: Path, device: torch.device) -> nn.Module:
 
     # Check if loaded object is a state_dict (OrderedDict or dict)
     if isinstance(loaded, (OrderedDict, dict)) and not isinstance(loaded, nn.Module):
-        # It's a state_dict, need to instantiate the model architecture first
+        # state_dict, need to instantiate model architecture first
         logging.info(f"Detected state_dict in {model_path.name}, inferring architecture from filename")
         model = infer_model_architecture(model_path.stem)
         model.load_state_dict(loaded)
@@ -139,7 +144,6 @@ def load_pytorch_model(model_path: Path, device: torch.device) -> nn.Module:
         model.eval()
         return model
     elif isinstance(loaded, nn.Module):
-        # It's a full model object
         model = loaded.to(device)
         model.eval()
         return model
@@ -159,16 +163,15 @@ def main():
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 200
+    sample_size = 300
     random_seed = 5432
 
     use_identity_sampler = False
     sample_correct_predictions = True
     sample_stratified = False
 
-    experiment_type = "sdp_verification"
-    experiment_tag = experiment_type
-    experiment_name = "sdp_crown_test"
+    experiment_name = "sdpcrown_300"
+    experiment_tag = experiment_name
 
     # ----------------------------------------VERIFIER CONFIGURATION------------------------------------------
     config_path = Path(__file__).parent.parent / "config" / "SDP-crown-conf.yaml"
@@ -176,12 +179,12 @@ def main():
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.2
-    epsilon_step = 8 / 255
+    epsilon_stop = 0.3
+    epsilon_step = 2 / 255
     epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
-    MODELS_DIR = get_models_dir(dataset_name) / experiment_type
+    MODELS_DIR = get_models_dir(dataset_name) / experiment_name
     RESULTS_DIR = get_results_dir()
 
     # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
@@ -200,6 +203,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    print(f"Loading models from {MODELS_DIR}")
     network_list = []
     for model_path in MODELS_DIR.glob("*.pth"):
         try:
@@ -221,8 +225,8 @@ def main():
     epsilon_tag = f"eps_{epsilon_start}_{epsilon_stop}_{epsilon_step}"
     # Comet experiment start
     comet_tracker.start_experiment(
-        experiment_name=f"rs_rd_{experiment_type}_{dataset_name}_{timestamp}",
-        tags=[experiment_type, dataset_name, experiment_name, epsilon_tag, *model_names],
+        experiment_name=f"rs_rd_{experiment_name}_{dataset_name}_{timestamp}",
+        tags=[experiment_name, dataset_name, epsilon_tag, *model_names],
         experiment_tag=experiment_tag,
     )
     experiment_repository.initialize_new_experiment(experiment_name)
@@ -234,7 +238,6 @@ def main():
             "split": split,
             "sample_size": sample_size,
             "sample_correct_predictions": sample_correct_predictions,
-            "experiment_type": experiment_type,
             "experiment_name": experiment_name,
             "epsilon_start": epsilon_start,
             "epsilon_stop": epsilon_stop,
