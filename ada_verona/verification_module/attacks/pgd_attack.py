@@ -40,6 +40,7 @@ class PGDAttack(Attack):
         step_size: float = None,  # Deprecated: use abs_stepsize instead
         randomise: bool = False,
         norm: str = "inf",
+        bounds: tuple = None,
     ) -> None:
         """
         Initialize the PGDAttack with specific parameters.
@@ -53,11 +54,15 @@ class PGDAttack(Attack):
             step_size (float, optional): Deprecated alias for abs_stepsize. Use abs_stepsize instead.
             randomise (bool, optional): Whether to randomize the initial perturbation. Defaults to False.
             norm (str, optional): The norm to use ('inf' or 'l2'). Defaults to 'inf'.
+            bounds (tuple, optional): (min, max) bounds for clamping perturbed images.
+                If None, no bounds clamping is applied (useful for normalized images).
+                Defaults to None.
         """
         super().__init__()
         self.number_iterations = number_iterations
         self.randomise = randomise
         self.norm = norm
+        self.bounds = bounds
 
         # backward compatibility: step_size -> abs_stepsize
         if step_size is not None:
@@ -68,10 +73,11 @@ class PGDAttack(Attack):
         self.abs_stepsize = abs_stepsize
         self.rel_stepsize = rel_stepsize
 
+        bounds_str = f"bounds={self.bounds}" if self.bounds is not None else "bounds=None"
         self.name = (
             f"PGDAttack (iterations={self.number_iterations}, "
             f"rel_stepsize={self.rel_stepsize}, abs_stepsize={self.abs_stepsize}, "
-            f"randomise={self.randomise}, norm={self.norm})"
+            f"randomise={self.randomise}, norm={self.norm}, {bounds_str})"
         )
 
     def execute(self, model: Module, data: Tensor, target: Tensor, epsilon: float) -> Tensor:
@@ -103,7 +109,10 @@ class PGDAttack(Attack):
                 adv_images = data + delta
             else:
                 adv_images = adv_images + torch.empty_like(data).uniform_(-epsilon, epsilon)
-            adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+            if self.bounds is not None:
+                adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+            else:
+                adv_images = adv_images.detach()
 
         for _ in range(self.number_iterations):
             adv_images.requires_grad = True
@@ -124,10 +133,18 @@ class PGDAttack(Attack):
                 delta = delta * torch.min(torch.ones_like(delta_norm), epsilon / delta_norm).view(
                     -1, *([1] * (len(delta.shape) - 1))
                 )
-                adv_images = torch.clamp(data + delta, min=0, max=1).detach()
+                adv_images = data + delta
+                if self.bounds is not None:
+                    adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+                else:
+                    adv_images = adv_images.detach()
             else:
                 adv_images = adv_images.detach() + step_size * grad.sign()
                 delta = torch.clamp(adv_images - data, min=-epsilon, max=epsilon)
-                adv_images = torch.clamp(data + delta, min=0, max=1).detach()
+                adv_images = data + delta
+                if self.bounds is not None:
+                    adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+                else:
+                    adv_images = adv_images.detach()
 
         return adv_images

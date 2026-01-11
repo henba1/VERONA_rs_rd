@@ -24,7 +24,6 @@ from ada_verona import (
     ExperimentRepository,
     IdentitySampler,
     One2AnyPropertyGenerator,
-    PGDAttack,
     PredictionsBasedSampler,
     PytorchExperimentDataset,
     create_distribution,
@@ -47,6 +46,7 @@ logging.getLogger("dulwich").setLevel(logging.WARNING)
 logging.getLogger("comet_ml").setLevel(logging.INFO)
 
 
+# use sdp_crown specific preprocessing for CIFAR-10
 def main():
     start_time = time.time()
 
@@ -157,17 +157,17 @@ def main():
     # cw_binary_search_steps = 5
 
     attack_configs = [
-        {
-            "name": "pgd_l2",
-            "attack": PGDAttack(
-                number_iterations=pgd_iterations,
-                rel_stepsize=pgd_rel_stepsize,
-                randomise=pgd_random_start,
-                norm="l2",
-            ),
-            "attack_type": "PGD",
-            "attack_iterations": pgd_iterations,
-        }
+        # {
+        #     "name": "pgd_l2",
+        #     "attack": PGDAttack(
+        #         number_iterations=pgd_iterations,
+        #         rel_stepsize=pgd_rel_stepsize,
+        #         randomise=pgd_random_start,
+        #         norm="l2",
+        #     ),
+        #     "attack_type": "PGD",
+        #     "attack_iterations": pgd_iterations,
+        # }
     ]
     if HAS_FOOLBOX:
         attack_configs.append(
@@ -175,7 +175,7 @@ def main():
                 "name": "foolbox_pgd_l2",
                 "attack": FoolboxAttack(
                     L2ProjectedGradientDescentAttack,
-                    bounds=(0, 1),
+                    bounds=(-3, 3),  # Wide bounds for normalized images
                     steps=pgd_iterations,
                     rel_stepsize=pgd_rel_stepsize,
                     random_start=pgd_random_start,
