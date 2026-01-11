@@ -1,7 +1,9 @@
 # SDP-CROWN Configuration Example
 # This file contains the hyperparameters and settings for SDP-CROWN verification
 
-# Optimize bound arguments for SDP-CROWN
+# we use standard SDP-CROWN hyperparameters
+# see https://github.com/Hong-Ming/SDP-CROWN/blob/main/sdp_crown.py
+
 optimize_bound_args:
   iteration: 300
   lr_alpha: 0.5
