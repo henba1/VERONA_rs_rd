@@ -120,6 +120,8 @@ try:
     get_dataset_config = experiment_utils.get_dataset_config
     save_original_indices = experiment_utils.save_original_indices
     load_networks_from_directory = experiment_utils.load_networks_from_directory
+    sdp_crown_models_loading = experiment_utils.sdp_crown_models_loading
+    load_sdpcrown_pytorch_model = experiment_utils.load_sdpcrown_pytorch_model
 
     get_dataset_dir = paths.get_dataset_dir
     get_models_dir = paths.get_models_dir
@@ -142,6 +144,8 @@ except (ImportError, AttributeError):
     get_models_dir = None
     get_results_dir = None
     load_networks_from_directory = None
+    sdp_crown_models_loading = None
+    load_sdpcrown_pytorch_model = None
 
 
 __all__ = [
@@ -200,6 +204,8 @@ __all__ = [
     "get_models_dir",
     "get_results_dir",
     "load_networks_from_directory",
+    "sdp_crown_models_loading",
+    "load_sdpcrown_pytorch_model",
 ]
 
 
