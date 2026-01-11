@@ -13,29 +13,25 @@ import torch.nn as nn
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from autoverify.verifier import SDPCrown
 
-# Import SDP-CROWN models for state_dict loading
 try:
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "SDP-CROWN"))
+    sys.path.insert(0, str(Path.home() / ".local/share/autoverify/verifiers/sdpcrown"))
     from models import (
         CIFAR10_CNN_A,
         CIFAR10_CNN_B,
         CIFAR10_CNN_C,
-        CIFAR_7_1024,
-        CONV_BIG,
         MNIST_MLP,
         CIFAR10_ConvDeep,
         CIFAR10_ConvLarge,
         CIFAR10_ConvSmall,
         MNIST_ConvLarge,
         MNIST_ConvSmall,
-        ResNet4B,
     )
 
     MODELS_AVAILABLE = True
 except ImportError as e:
     MODELS_AVAILABLE = False
     logging.warning(
-        f"Could not import SDP-CROWN models from {Path(__file__).parent.parent.parent.parent / 'SDP-CROWN'}. "
+        f"Could not import SDP-CROWN models from {Path.home() / '.local/share/autoverify/verifiers/sdpcrown'}. "
         f"State_dict loading will not work. Error: {e}"
     )
 
@@ -61,7 +57,6 @@ from ada_verona import (
 )
 from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNetwork
 
-# Set up logging using the custom logger
 logger.setup_logging(level=logging.INFO)
 
 
@@ -88,7 +83,6 @@ def infer_model_architecture(model_name: str) -> nn.Module:
 
     name = model_name.lower()
 
-    # MNIST models
     if "mnist" in name:
         if "mlp" in name:
             return MNIST_MLP()
@@ -97,7 +91,6 @@ def infer_model_architecture(model_name: str) -> nn.Module:
         else:
             return MNIST_ConvLarge()
 
-    # CIFAR-10 models
     elif "cifar" in name or "cifar10" in name:
         if "cnn_a" in name:
             return CIFAR10_CNN_A()
@@ -114,14 +107,6 @@ def infer_model_architecture(model_name: str) -> nn.Module:
         else:
             # Default to ConvLarge for CIFAR-10
             return CIFAR10_ConvLarge()
-
-    # JAIR CIFAR-10 architectures
-    elif "conv_big" in name:
-        return CONV_BIG()
-    elif "cifar_7_1024" in name:
-        return CIFAR_7_1024()
-    elif "resnet_4b" in name or "resnet4b" in name:
-        return ResNet4B(bn=False)
 
     else:
         raise ValueError(
