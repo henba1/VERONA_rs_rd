@@ -7,6 +7,16 @@ import numpy as np
 import torch
 
 import ada_verona.util.logger as logger
+
+try:
+    from foolbox.attacks import L2ProjectedGradientDescentAttack
+
+    from ada_verona import FoolboxAttack
+
+    HAS_FOOLBOX = True
+except ImportError:
+    HAS_FOOLBOX = False
+
 from ada_verona import (
     AttackEstimationModule,
     BinarySearchEpsilonValueEstimator,
@@ -24,11 +34,11 @@ from ada_verona import (
     get_models_dir,
     get_results_dir,
     get_sample,
-    load_networks_from_directory,
     log_classifier_metrics,
     log_verona_experiment_summary,
     log_verona_results,
     save_original_indices,
+    sdp_crown_models_loading,
 )
 
 logger.setup_logging(level=logging.INFO)
@@ -41,12 +51,12 @@ def main():
     start_time = time.time()
 
     # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
-    experiment_type = "pgd_vs_foolbox_pgd"
+    experiment_type = "pgdl2_foolbox_pgdl2"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 5
-    random_seed = 42
+    sample_size = 300
+    random_seed = 5432
     experiment_tag = experiment_type
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
     use_identity_sampler = False
@@ -55,11 +65,11 @@ def main():
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.5
-    epsilon_step = 8 / 255
+    epsilon_stop = 0.3
+    epsilon_step = 2 / 255
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
-    MODELS_DIR = get_models_dir(dataset_name) / experiment_type
+    MODELS_DIR = get_models_dir(dataset_name) / "sdpcrown_300"
     RESULTS_DIR = get_results_dir()
 
     # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
@@ -78,7 +88,7 @@ def main():
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    network_list = load_networks_from_directory(MODELS_DIR, input_shape, device)
+    network_list = sdp_crown_models_loading(MODELS_DIR, input_shape, device)
     model_names = [network.name for network in network_list]
 
     if len(network_list) == 0:
@@ -106,6 +116,9 @@ def main():
 
     # ----------------------------------------DATASET CONFIGURATION-----------------------------------------------
     # load dataset and get original CIFAR-10 indices
+    # Apply SDP-CROWN preprocessing for CIFAR-10 images (normalization with SDP-CROWN means/std)
+    # Note: flatten=True because images are flattened when passed to attacks/verifiers
+    # Preprocessing is applied BEFORE flattening (transform order: ToTensor -> Preprocess -> Flatten)
     if sample_stratified:
         cifar10_torch_dataset, original_indices = get_balanced_sample(
             dataset_name=dataset_name,
@@ -113,6 +126,8 @@ def main():
             dataset_size=sample_size,
             dataset_dir=DATASET_DIR,
             seed=random_seed,
+            flatten=True,
+            sdpcrown_preprocess=True,
         )
     else:
         cifar10_torch_dataset, original_indices = get_sample(
@@ -121,6 +136,8 @@ def main():
             dataset_size=sample_size,
             dataset_dir=DATASET_DIR,
             seed=random_seed,
+            flatten=True,
+            sdpcrown_preprocess=True,
         )
     # Pass original_indices to maintain mapping to original dataset
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
@@ -134,7 +151,7 @@ def main():
     pgd_rel_stepsize = 0.025
     pgd_random_start = False
 
-    # Carlini-Wagner parameters
+    # Cw params
     # cw_steps = pgd_iterations
     # cw_stepsize = 0.01
     # cw_binary_search_steps = 5
@@ -150,33 +167,25 @@ def main():
             ),
             "attack_type": "PGD",
             "attack_iterations": pgd_iterations,
-        },
-        # {
-        #     "name": "foolbox_pgd_l2",
-        #     "attack": FoolboxAttack(
-        #         L2ProjectedGradientDescentAttack,
-        #         bounds=(0, 1),
-        #         steps=pgd_iterations,
-        #         rel_stepsize=pgd_rel_stepsize,
-        #         random_start=pgd_random_start,
-        #     ),
-        #     "attack_type": "Foolbox PGD L2",
-        #     "attack_iterations": pgd_iterations,
-        # },
-        # {
-        #     "name": "foolbox_cw_l2",
-        #     "attack": FoolboxAttack(
-        #         L2CarliniWagnerAttack,
-        #         bounds=(0, 1),
-        #         steps=cw_steps,
-        #         stepsize=cw_stepsize,
-        #         binary_search_steps=cw_binary_search_steps,
-        #         abort_early=True,  # Stop early when attack succeeds (similar to PGD behavior)
-        #     ),
-        #     "attack_type": "Foolbox CW L2",
-        #     "attack_iterations": cw_steps * cw_binary_search_steps,  # Total iterations
-        # },
+        }
     ]
+    if HAS_FOOLBOX:
+        attack_configs.append(
+            {
+                "name": "foolbox_pgd_l2",
+                "attack": FoolboxAttack(
+                    L2ProjectedGradientDescentAttack,
+                    bounds=(0, 1),
+                    steps=pgd_iterations,
+                    rel_stepsize=pgd_rel_stepsize,
+                    random_start=pgd_random_start,
+                ),
+                "attack_type": "Foolbox PGD L2",
+                "attack_iterations": pgd_iterations,
+            }
+        )
+    else:
+        logging.warning("Foolbox not available; skipping foolbox attack configs.")
 
     # Initialize first experiment for classifier metrics computation and indices file saving
     # (metrics are computed once and shared across all attacks)

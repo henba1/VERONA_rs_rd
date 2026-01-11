@@ -3,43 +3,14 @@ import os
 import subprocess
 import sys
 import time
-from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from autoverify.verifier import SDPCrown
-
-try:
-    try:
-        sdp_crown_tool_dir = SDPCrown().tool_path
-    except Exception:
-        sdp_crown_tool_dir = Path.home() / ".local/share/autoverify/verifiers/sdpcrown/tool"
-    sys.path.insert(0, str(sdp_crown_tool_dir))
-    from models import (
-        CIFAR10_CNN_A,
-        CIFAR10_CNN_B,
-        CIFAR10_CNN_C,
-        MNIST_MLP,
-        CIFAR10_ConvDeep,
-        CIFAR10_ConvLarge,
-        CIFAR10_ConvSmall,
-        MNIST_ConvLarge,
-        MNIST_ConvSmall,
-    )
-
-    MODELS_AVAILABLE = True
-except ImportError as e:
-    MODELS_AVAILABLE = False
-    logging.warning(
-        "Could not import SDP-CROWN models from %s. State_dict loading will not work. Error: %s",
-        sdp_crown_tool_dir,
-        e,
-    )
 
 import ada_verona.util.logger as logger
 from ada_verona import (
@@ -52,6 +23,7 @@ from ada_verona import (
     PredictionsBasedSampler,
     PytorchExperimentDataset,
     create_distribution,
+    create_experiment_directory,
     get_balanced_sample,
     get_dataset_dir,
     get_models_dir,
@@ -60,8 +32,8 @@ from ada_verona import (
     log_classifier_metrics,
     log_verona_experiment_summary,
     log_verona_results,
+    sdp_crown_models_loading,
 )
-from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNetwork
 
 logger.setup_logging(level=logging.INFO)
 
@@ -69,89 +41,6 @@ logger.setup_logging(level=logging.INFO)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("dulwich").setLevel(logging.WARNING)
 logging.getLogger("comet_ml").setLevel(logging.INFO)
-
-
-def infer_model_architecture(model_name: str) -> nn.Module:
-    """
-    Infer PyTorch model architecture from model filename.
-
-    Args:
-        model_name: Model filename (without extension)
-
-    Returns:
-        Instantiated model architecture
-    """
-    if not MODELS_AVAILABLE:
-        raise ImportError(
-            "SDP-CROWN models are not available. Cannot load state_dict files. "
-            "Please ensure SDP-CROWN is available in the expected location."
-        )
-
-    name = model_name.lower()
-
-    if "mnist" in name:
-        if "mlp" in name:
-            return MNIST_MLP()
-        elif "convsmall" in name:
-            return MNIST_ConvSmall()
-        else:
-            return MNIST_ConvLarge()
-
-    elif "cifar" in name or "cifar10" in name:
-        if "cnn_a" in name:
-            return CIFAR10_CNN_A()
-        elif "cnn_b" in name:
-            return CIFAR10_CNN_B()
-        elif "cnn_c" in name:
-            return CIFAR10_CNN_C()
-        elif "convsmall" in name:
-            return CIFAR10_ConvSmall()
-        elif "convdeep" in name:
-            return CIFAR10_ConvDeep()
-        elif "convlarge" in name or "conv_large" in name:
-            return CIFAR10_ConvLarge()
-        else:
-            # Default to ConvLarge for CIFAR-10
-            return CIFAR10_ConvLarge()
-
-    else:
-        raise ValueError(
-            f"Could not infer architecture from model name '{model_name}'. "
-            "Please use one of the known SDP-CROWN architectures."
-        )
-
-
-def load_pytorch_model(model_path: Path, device: torch.device) -> nn.Module:
-    """
-    Load a PyTorch model from a .pth file, handling both state_dict and full model objects.
-
-    Args:
-        model_path: Path to the .pth file
-        device: PyTorch device to load the model on
-
-    Returns:
-        Loaded PyTorch model
-    """
-    loaded = torch.load(model_path, map_location=device, weights_only=False)
-
-    # Check if loaded object is a state_dict (OrderedDict or dict)
-    if isinstance(loaded, (OrderedDict, dict)) and not isinstance(loaded, nn.Module):
-        # state_dict, need to instantiate model architecture first
-        logging.info(f"Detected state_dict in {model_path.name}, inferring architecture from filename")
-        model = infer_model_architecture(model_path.stem)
-        model.load_state_dict(loaded)
-        model = model.to(device)
-        model.eval()
-        return model
-    elif isinstance(loaded, nn.Module):
-        model = loaded.to(device)
-        model.eval()
-        return model
-    else:
-        raise ValueError(
-            f"Unsupported checkpoint format in {model_path}. "
-            "Expected either a state_dict (OrderedDict/dict) or a full model (nn.Module)."
-        )
 
 
 def main():
@@ -163,7 +52,7 @@ def main():
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 300
+    sample_size = 10
     random_seed = 5432
 
     use_identity_sampler = False
@@ -191,34 +80,25 @@ def main():
     comet_tracker = CometTracker(project_name="rs-rd", auto_login=True)
 
     # ----------------------------------------EXPERIMENT REPOSITORY CONFIGURATION----------------------------------
-    experiment_dir_name = (
-        f"verona_rs_rd_{experiment_name}_{dataset_name}_{sample_size}_"
-        f"sample_correct_{sample_correct_predictions}_"
-        f"sample_stratified_{sample_stratified}"
+    experiment_repository_path = create_experiment_directory(
+        results_dir=RESULTS_DIR,
+        experiment_type=experiment_name,
+        dataset_name=dataset_name,
+        timestamp=timestamp,
+        experiment_tag=experiment_tag,
     )
-    experiment_repository_path = Path(RESULTS_DIR) / experiment_dir_name
-    os.makedirs(experiment_repository_path, exist_ok=True)
     # networks are loaded from this object
     experiment_repository = ExperimentRepository(base_path=experiment_repository_path, network_folder=MODELS_DIR)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"Loading models from {MODELS_DIR}")
-    network_list = []
-    for model_path in MODELS_DIR.glob("*.pth"):
-        try:
-            model = load_pytorch_model(model_path, device)
-            network_list.append(
-                PyTorchNetwork(
-                    model=model,
-                    input_shape=input_shape,
-                    name=model_path.stem,
-                    path=model_path,
-                )
-            )
-            logging.info(f"Successfully loaded model: {model_path.name}")
-        except Exception as e:
-            logging.error(f"Failed to load model {model_path.name}: {e}", exc_info=True)
+    network_list = sdp_crown_models_loading(MODELS_DIR, input_shape, device)
+
+    if len(network_list) == 0:
+        logging.error(f"No models found in {MODELS_DIR}")
+        logging.error("Ensure models exist in models directory (formats: .pth)")
+        return
 
     model_names = [network.name for network in network_list]
 
@@ -249,6 +129,9 @@ def main():
 
     # ----------------------------------------DATASET CONFIGURATION-----------------------------------------------
     # load dataset and get original CIFAR-10 indices
+    # Apply SDP-CROWN preprocessing for CIFAR-10 images (normalization with SDP-CROWN means/std)
+    # Note: flatten=True because images are flattened when passed to SDP-CROWN verifier via .npz file
+    # Preprocessing is applied BEFORE flattening (transform order: ToTensor -> Preprocess -> Flatten)
     if sample_stratified:
         cifar10_torch_dataset, original_indices = get_balanced_sample(
             dataset_name=dataset_name,
@@ -256,6 +139,8 @@ def main():
             dataset_size=sample_size,
             dataset_dir=DATASET_DIR,
             seed=random_seed,
+            flatten=True,
+            sdpcrown_preprocess=True,
         )
     else:
         cifar10_torch_dataset, original_indices = get_sample(
@@ -264,6 +149,8 @@ def main():
             dataset_size=sample_size,
             dataset_dir=DATASET_DIR,
             seed=random_seed,
+            flatten=True,
+            sdpcrown_preprocess=True,
         )
     # Pass original_indices to maintain mapping to original dataset
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
