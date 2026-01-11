@@ -41,6 +41,7 @@ class PGDAttack(Attack):
         randomise: bool = False,
         norm: str = "inf",
         bounds: tuple = None,
+        l2_input_divisor: float | None = None,
     ) -> None:
         """
         Initialize the PGDAttack with specific parameters.
@@ -63,6 +64,7 @@ class PGDAttack(Attack):
         self.randomise = randomise
         self.norm = norm
         self.bounds = bounds
+        self.l2_input_divisor = l2_input_divisor
 
         # backward compatibility: step_size -> abs_stepsize
         if step_size is not None:
@@ -74,10 +76,11 @@ class PGDAttack(Attack):
         self.rel_stepsize = rel_stepsize
 
         bounds_str = f"bounds={self.bounds}" if self.bounds is not None else "bounds=None"
+        l2_divisor_str = f", l2_input_divisor={self.l2_input_divisor}" if self.l2_input_divisor is not None else ""
         self.name = (
             f"PGDAttack (iterations={self.number_iterations}, "
             f"rel_stepsize={self.rel_stepsize}, abs_stepsize={self.abs_stepsize}, "
-            f"randomise={self.randomise}, norm={self.norm}, {bounds_str})"
+            f"randomise={self.randomise}, norm={self.norm}, {bounds_str}{l2_divisor_str})"
         )
 
     def execute(self, model: Module, data: Tensor, target: Tensor, epsilon: float) -> Tensor:
@@ -95,17 +98,37 @@ class PGDAttack(Attack):
         """
         # adapted from: https://github.com/Harry24k/adversarial-attacks-pytorch/blob/master/torchattacks/attacks/pgd.py
         # l2 norm adapted from: https://github.com/Harry24k/adversarial-attacks-pytorch/blob/master/torchattacks/attacks/pgdl2.py
+
+        was_training = model.training
+        model.eval()
+
         loss_fn = nn.CrossEntropyLoss()
         adv_images = data.clone().detach()
 
-        step_size = self.abs_stepsize if self.abs_stepsize is not None else self.rel_stepsize * epsilon
+        # if  model input is normalized (e.g. CIFAR-10 SDP-CROWN preprocessing divides by std=0.225),
+        # convert pixel-space epsilon into model-input-space epsilon for L2 attacks only.
+        if self.norm == "l2" and self.l2_input_divisor is not None:
+            epsilon = epsilon / self.l2_input_divisor
+
+        if self.abs_stepsize is not None:
+            step_size = self.abs_stepsize
+        else:
+            rel_stepsize = self.rel_stepsize
+            if rel_stepsize is None:
+                # Backwards-compatible defaults (also documented in __init__ docstring).
+                rel_stepsize = (2.5 if self.norm == "l2" else 1.0) / self.number_iterations
+            step_size = rel_stepsize * epsilon
 
         if self.randomise:
             if self.norm == "l2":
                 delta = torch.randn_like(data)
-                delta_flat = delta.view(delta.shape[0], -1)
-                delta_norm = torch.norm(delta_flat, p=2, dim=1, keepdim=True)
-                delta = delta * epsilon / delta_norm.view(-1, *([1] * (len(delta.shape) - 1)))
+                if delta.dim() == 1:
+                    delta_norm = torch.norm(delta, p=2) + 1e-10
+                    delta = delta * (epsilon / delta_norm)
+                else:
+                    delta_flat = delta.view(delta.shape[0], -1)
+                    delta_norm = torch.norm(delta_flat, p=2, dim=1, keepdim=True) + 1e-10
+                    delta = delta * (epsilon / delta_norm).view(-1, *([1] * (len(delta.shape) - 1)))
                 adv_images = data + delta
             else:
                 adv_images = adv_images + torch.empty_like(data).uniform_(-epsilon, epsilon)
@@ -114,37 +137,49 @@ class PGDAttack(Attack):
             else:
                 adv_images = adv_images.detach()
 
-        for _ in range(self.number_iterations):
-            adv_images.requires_grad = True
-            output = model(adv_images)
+        try:
+            for _ in range(self.number_iterations):
+                adv_images.requires_grad = True
+                output = model(adv_images)
 
-            loss = loss_fn(output, target)
-            grad = torch.autograd.grad(loss, adv_images, retain_graph=False, create_graph=False)[0]
+                loss = loss_fn(output, target)
+                grad = torch.autograd.grad(loss, adv_images, retain_graph=False, create_graph=False)[0]
 
-            if self.norm == "l2":
-                grad_flat = grad.view(grad.shape[0], -1)
-                grad_norm = torch.norm(grad_flat, p=2, dim=1, keepdim=True) + 1e-10
-                normalized_grad = grad / grad_norm.view(-1, *([1] * (len(grad.shape) - 1)))
-                adv_images = adv_images.detach() + step_size * normalized_grad
+                if self.norm == "l2":
+                    if grad.dim() == 1:
+                        grad_norm = torch.norm(grad, p=2) + 1e-10
+                        normalized_grad = grad / grad_norm
+                    else:
+                        grad_flat = grad.view(grad.shape[0], -1)
+                        grad_norm = torch.norm(grad_flat, p=2, dim=1, keepdim=True) + 1e-10
+                        normalized_grad = grad / grad_norm.view(-1, *([1] * (len(grad.shape) - 1)))
+                    adv_images = adv_images.detach() + step_size * normalized_grad
 
-                delta = adv_images - data
-                delta_flat = delta.view(delta.shape[0], -1)
-                delta_norm = torch.norm(delta_flat, p=2, dim=1, keepdim=True) + 1e-10
-                delta = delta * torch.min(torch.ones_like(delta_norm), epsilon / delta_norm).view(
-                    -1, *([1] * (len(delta.shape) - 1))
-                )
-                adv_images = data + delta
-                if self.bounds is not None:
-                    adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+                    delta = adv_images - data
+                    if delta.dim() == 1:
+                        delta_norm = torch.norm(delta, p=2) + 1e-10
+                        delta = delta * min(1.0, float(epsilon / delta_norm))
+                    else:
+                        delta_flat = delta.view(delta.shape[0], -1)
+                        delta_norm = torch.norm(delta_flat, p=2, dim=1, keepdim=True) + 1e-10
+                        delta = delta * torch.min(torch.ones_like(delta_norm), epsilon / delta_norm).view(
+                            -1, *([1] * (len(delta.shape) - 1))
+                        )
+                    adv_images = data + delta
+                    if self.bounds is not None:
+                        adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+                    else:
+                        adv_images = adv_images.detach()
                 else:
-                    adv_images = adv_images.detach()
-            else:
-                adv_images = adv_images.detach() + step_size * grad.sign()
-                delta = torch.clamp(adv_images - data, min=-epsilon, max=epsilon)
-                adv_images = data + delta
-                if self.bounds is not None:
-                    adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
-                else:
-                    adv_images = adv_images.detach()
+                    adv_images = adv_images.detach() + step_size * grad.sign()
+                    delta = torch.clamp(adv_images - data, min=-epsilon, max=epsilon)
+                    adv_images = data + delta
+                    if self.bounds is not None:
+                        adv_images = torch.clamp(adv_images, min=self.bounds[0], max=self.bounds[1]).detach()
+                    else:
+                        adv_images = adv_images.detach()
 
-        return adv_images
+            return adv_images
+        finally:
+            if was_training:
+                model.train()

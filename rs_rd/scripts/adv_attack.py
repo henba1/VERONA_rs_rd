@@ -7,16 +7,6 @@ import numpy as np
 import torch
 
 import ada_verona.util.logger as logger
-
-try:
-    from foolbox.attacks import L2ProjectedGradientDescentAttack
-
-    from ada_verona import FoolboxAttack
-
-    HAS_FOOLBOX = True
-except ImportError:
-    HAS_FOOLBOX = False
-
 from ada_verona import (
     AttackEstimationModule,
     BinarySearchEpsilonValueEstimator,
@@ -24,6 +14,7 @@ from ada_verona import (
     ExperimentRepository,
     IdentitySampler,
     One2AnyPropertyGenerator,
+    PGDAttack,
     PredictionsBasedSampler,
     PytorchExperimentDataset,
     create_distribution,
@@ -51,7 +42,7 @@ def main():
     start_time = time.time()
 
     # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
-    experiment_type = "pgdl2_foolbox_pgdl2"
+    experiment_type = "l2_adv_attacks"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
@@ -65,7 +56,7 @@ def main():
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.3
+    epsilon_stop = 1.5
     epsilon_step = 2 / 255
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
@@ -143,52 +134,44 @@ def main():
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
 
     # ----------------------------------------VERIFICATION CONFIGURATION---------------------------------------------
-    # 10, 0, 1 (default) for CIFAR-10, same for MNIST #TODO adjust for ImageNet
     property_generator = One2AnyPropertyGenerator()
 
-    # PGD parameters
+    # PGD-L2 sanity-check defaults: use T=40 steps and a common heuristic α ≈ 2ε/T -> rel_stepsize=2/40=0.05.
     pgd_iterations = 40
-    pgd_rel_stepsize = 0.025
+    pgd_rel_stepsize = 0.05
     pgd_random_start = False
-
-    # Cw params
-    # cw_steps = pgd_iterations
-    # cw_stepsize = 0.01
-    # cw_binary_search_steps = 5
+    # SDP-CROWN CIFAR-10 preprocessing normalizes by std=0.225 (see `SDPCrownCIFAR10Preprocess`)
+    pgd_l2_normalization_scalar = 0.225
 
     attack_configs = [
+        {
+            "name": "pgd_l2",
+            "attack": PGDAttack(
+                number_iterations=pgd_iterations,
+                rel_stepsize=pgd_rel_stepsize,
+                randomise=pgd_random_start,
+                norm="l2",
+                l2_input_divisor=pgd_l2_normalization_scalar,
+            ),
+            "attack_type": "PGD",
+            "attack_iterations": pgd_iterations,
+        },
         # {
-        #     "name": "pgd_l2",
-        #     "attack": PGDAttack(
-        #         number_iterations=pgd_iterations,
-        #         rel_stepsize=pgd_rel_stepsize,
-        #         randomise=pgd_random_start,
-        #         norm="l2",
+        #     "name": "cw_l2",
+        #     "attack": CWL2Attack(
+        #         targeted=False,
+        #         confidence=0.0,
+        #         learning_rate=0.01,
+        #         binary_search_steps=6,
+        #         max_iterations=300,
+        #         abort_early=False,
+        #         bounds=None,
         #     ),
-        #     "attack_type": "PGD",
-        #     "attack_iterations": pgd_iterations,
-        # }
+        #     "attack_type": "C&W L2",
+        #     "attack_iterations": 300 * 6,  # Total iterations
+        # },
     ]
-    if HAS_FOOLBOX:
-        attack_configs.append(
-            {
-                "name": "foolbox_pgd_l2",
-                "attack": FoolboxAttack(
-                    L2ProjectedGradientDescentAttack,
-                    bounds=(-3, 3),  # Wide bounds for normalized images
-                    steps=pgd_iterations,
-                    rel_stepsize=pgd_rel_stepsize,
-                    random_start=pgd_random_start,
-                ),
-                "attack_type": "Foolbox PGD L2",
-                "attack_iterations": pgd_iterations,
-            }
-        )
-    else:
-        logging.warning("Foolbox not available; skipping foolbox attack configs.")
 
-    # Initialize first experiment for classifier metrics computation and indices file saving
-    # (metrics are computed once and shared across all attacks)
     first_attack_name = attack_configs[0]["name"]
     experiment_repository.initialize_new_experiment(first_attack_name)
 
