@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=120G
-#SBATCH --time=20:00:00
+#SBATCH --time=8:00:00
 #SBATCH --output=/projects/prjs1681/runs/slurm_outputs/adv_attack_%j.out
 #SBATCH --error=/projects/prjs1681/runs/slurm_outputs/adv_attack_%j.err
 
@@ -17,7 +17,7 @@ echo "Working Directory: $(pwd)"
 echo "Loaded modules:"
 module list 2>&1
 
-cd /home/jvrijn/code/rs/verif/VERONA_rs_rd 
+cd /home/jvrijn/code/rs/verif/VERONA_rs_rd/rs_rd/scripts
 
 source /gpfs/home2/jvrijn/miniforge3/etc/profile.d/conda.sh
 conda activate verona_jair
@@ -29,7 +29,7 @@ echo "Python version: $(python --version)"
 # Note: This script runs multiple attack estimators (PGD L2, Foolbox PGD L2, Foolbox CW L2)
 # Each attack runs sequentially, so total runtime may be longer than single attack runs
 
-python rs_rd/adv_attack.py
+python adv_attack.py
 
 # Print completion information
 echo "Job completed at: $(date)"
