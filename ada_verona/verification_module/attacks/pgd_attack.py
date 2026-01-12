@@ -41,7 +41,7 @@ class PGDAttack(Attack):
         randomise: bool = False,
         norm: str = "inf",
         bounds: tuple = None,
-        l2_input_divisor: float | None = None,
+        std_rescale_factor: float | None = None,
     ) -> None:
         """
         Initialize the PGDAttack with specific parameters.
@@ -64,7 +64,7 @@ class PGDAttack(Attack):
         self.randomise = randomise
         self.norm = norm
         self.bounds = bounds
-        self.l2_input_divisor = l2_input_divisor
+        self.std_rescale_factor = std_rescale_factor
 
         # backward compatibility: step_size -> abs_stepsize
         if step_size is not None:
@@ -76,11 +76,11 @@ class PGDAttack(Attack):
         self.rel_stepsize = rel_stepsize
 
         bounds_str = f"bounds={self.bounds}" if self.bounds is not None else "bounds=None"
-        l2_divisor_str = f", l2_input_divisor={self.l2_input_divisor}" if self.l2_input_divisor is not None else ""
+        rescale_str = f", std_rescale_factor={self.std_rescale_factor}" if self.std_rescale_factor is not None else ""
         self.name = (
             f"PGDAttack (iterations={self.number_iterations}, "
             f"rel_stepsize={self.rel_stepsize}, abs_stepsize={self.abs_stepsize}, "
-            f"randomise={self.randomise}, norm={self.norm}, {bounds_str}{l2_divisor_str})"
+            f"randomise={self.randomise}, norm={self.norm}, {bounds_str}{rescale_str})"
         )
 
     def execute(self, model: Module, data: Tensor, target: Tensor, epsilon: float) -> Tensor:
@@ -105,10 +105,10 @@ class PGDAttack(Attack):
         loss_fn = nn.CrossEntropyLoss()
         adv_images = data.clone().detach()
 
-        # if  model input is normalized (e.g. CIFAR-10 SDP-CROWN preprocessing divides by std=0.225),
-        # convert pixel-space epsilon into model-input-space epsilon for L2 attacks only.
-        if self.norm == "l2" and self.l2_input_divisor is not None:
-            epsilon = epsilon / self.l2_input_divisor
+        # If model input is normalized (e.g. CIFAR-10 SDP-CROWN preprocessing divides by std=0.225),
+        # convert pixel-space epsilon into model-input-space epsilon.
+        if self.norm in {"l2", "inf"} and self.std_rescale_factor is not None:
+            epsilon = epsilon / self.std_rescale_factor
 
         if self.abs_stepsize is not None:
             step_size = self.abs_stepsize

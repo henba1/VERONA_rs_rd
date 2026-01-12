@@ -42,11 +42,11 @@ def main():
     start_time = time.time()
 
     # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
-    experiment_type = "l2_adv_attacks"
+    experiment_type = "adv_attack_pgd_l2_linf"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 300
+    sample_size = 1000
     random_seed = 5432
     experiment_tag = experiment_type
     # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
@@ -141,9 +141,23 @@ def main():
     pgd_rel_stepsize = 0.05
     pgd_random_start = False
     # SDP-CROWN CIFAR-10 preprocessing normalizes by std=0.225 (see `SDPCrownCIFAR10Preprocess`)
-    pgd_l2_normalization_scalar = 0.225
+    # we pass `std_rescale_factor=0.225` to normalize the epsilon, so epsilons remain in pixel space
+    # and are converted inside the attack.
+    std_rescale_factor = 0.225
 
     attack_configs = [
+        {
+            "name": "pgd_linf",
+            "attack": PGDAttack(
+                number_iterations=pgd_iterations,
+                rel_stepsize=1.0 / pgd_iterations,
+                randomise=pgd_random_start,
+                norm="inf",
+                std_rescale_factor=std_rescale_factor,
+            ),
+            "attack_type": "PGD",
+            "attack_iterations": pgd_iterations,
+        },
         {
             "name": "pgd_l2",
             "attack": PGDAttack(
@@ -151,25 +165,11 @@ def main():
                 rel_stepsize=pgd_rel_stepsize,
                 randomise=pgd_random_start,
                 norm="l2",
-                l2_input_divisor=pgd_l2_normalization_scalar,
+                std_rescale_factor=std_rescale_factor,
             ),
             "attack_type": "PGD",
             "attack_iterations": pgd_iterations,
         },
-        # {
-        #     "name": "cw_l2",
-        #     "attack": CWL2Attack(
-        #         targeted=False,
-        #         confidence=0.0,
-        #         learning_rate=0.01,
-        #         binary_search_steps=6,
-        #         max_iterations=300,
-        #         abort_early=False,
-        #         bounds=None,
-        #     ),
-        #     "attack_type": "C&W L2",
-        #     "attack_iterations": 300 * 6,  # Total iterations
-        # },
     ]
 
     first_attack_name = attack_configs[0]["name"]
@@ -248,7 +248,7 @@ def main():
             }
             comet_tracker.log_parameters(attack_params)
 
-            # Log classifier metrics for this attack experiment (using pre-computed metrics)
+            # Log classifier metrics for this attack experiment
             for network in network_list:
                 if network.name in network_metrics:
                     log_classifier_metrics(comet_tracker, network.name, network_metrics[network.name])
