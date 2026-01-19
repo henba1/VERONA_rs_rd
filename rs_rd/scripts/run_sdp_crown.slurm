@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=sdp_crown
-#SBATCH --partition=gpu_h100 
+#SBATCH --partition=gpu_a100 
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=18
-#SBATCH --mem=180G
-#SBATCH --time=6:00:00
+#SBATCH --mem=120G
+#SBATCH --time=00:30:00
 #SBATCH --output=/projects/prjs1681/runs/slurm_outputs/sdpcrown_%j.out
 #SBATCH --error=/projects/prjs1681/runs/slurm_outputs/sdpcrown_%j.err
 #SBATCH --export=ALL

@@ -43,6 +43,7 @@ logging.getLogger("dulwich").setLevel(logging.WARNING)
 logging.getLogger("comet_ml").setLevel(logging.INFO)
 
 
+# use sdp_crown specific preprocessing for CIFAR-10
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Log experiment start time
@@ -68,7 +69,7 @@ def main():
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.3
+    epsilon_stop = 0.4
     epsilon_step = 2 / 255
     epsilon_list = np.arange(epsilon_start, epsilon_stop, epsilon_step)
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
@@ -122,7 +123,7 @@ def main():
             "epsilon_start": epsilon_start,
             "epsilon_stop": epsilon_stop,
             "epsilon_step": epsilon_step,
-            "sampling_method": "StratifiedShuffleSplit",
+            "sample_stratified": sample_stratified,
             "random_seed_dataset_sampling": random_seed,
         }
     )

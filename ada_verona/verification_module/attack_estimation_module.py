@@ -74,7 +74,9 @@ class AttackEstimationModule(VerificationModule):
             _, predicted_labels = torch.topk(output, self.top_k)
 
             duration = time.time() - start
-            if target in predicted_labels:
+            is_adversarial = target not in predicted_labels
+
+            if not is_adversarial:
                 return CompleteVerificationData(
                     result=VerificationResult.UNSAT, took=duration, obtained_labels=predicted_labels
                 )

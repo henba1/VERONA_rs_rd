@@ -122,6 +122,7 @@ try:
     load_networks_from_directory = experiment_utils.load_networks_from_directory
     sdp_crown_models_loading = experiment_utils.sdp_crown_models_loading
     load_sdpcrown_pytorch_model = experiment_utils.load_sdpcrown_pytorch_model
+    apply_pytorch_normalization = experiment_utils.apply_pytorch_normalization
 
     get_dataset_dir = paths.get_dataset_dir
     get_models_dir = paths.get_models_dir
@@ -146,6 +147,7 @@ except (ImportError, AttributeError):
     load_networks_from_directory = None
     sdp_crown_models_loading = None
     load_sdpcrown_pytorch_model = None
+    apply_pytorch_normalization = None
 
 
 __all__ = [
@@ -206,6 +208,7 @@ __all__ = [
     "load_networks_from_directory",
     "sdp_crown_models_loading",
     "load_sdpcrown_pytorch_model",
+    "apply_pytorch_normalization",
 ]
 
 

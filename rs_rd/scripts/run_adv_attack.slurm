@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=120G
-#SBATCH --time=8:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=/projects/prjs1681/runs/slurm_outputs/adv_attack_%j.out
 #SBATCH --error=/projects/prjs1681/runs/slurm_outputs/adv_attack_%j.err
 

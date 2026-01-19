@@ -95,7 +95,7 @@ class ExperimentRepository:
             Exception: If a directory with the same name already exists.
         """
         now = datetime.now()
-        now_string = now.strftime("%d-%m-%Y+%H_%M")
+        now_string = now.strftime("%d-%m-%Y+%H_%M_%S")
 
         self.act_experiment_path = self.base_path / f"{experiment_name}_{now_string}"
 

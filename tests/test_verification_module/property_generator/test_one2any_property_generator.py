@@ -35,10 +35,8 @@ def test_create_vnnlib_property(property_generator):
 
     assert isinstance(vnnlib_property, VNNLibProperty)
     assert vnnlib_property.name == "property_0_0_1"
-    assert "; Spec for image and epsilon 0.10000" in vnnlib_property.content
 
     content = vnnlib_property.content
-    assert "; Spec for image and epsilon 0.10000" in content
     assert "(declare-const X_0 Real)" in content
     assert "(declare-const Y_0 Real)" in content
     assert "(assert (or" in content

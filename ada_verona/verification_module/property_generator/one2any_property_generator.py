@@ -88,9 +88,6 @@ class One2AnyPropertyGenerator(PropertyGenerator):
         return VNNLibProperty(
             name=property_name,
             content=result,
-            epsilon=epsilon,
-            image=image,
-            image_class=image_class,
         )
 
     def get_dict_for_epsilon_result(self) -> dict:

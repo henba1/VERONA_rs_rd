@@ -19,6 +19,7 @@ import torch.nn as nn
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
+from torchvision.datasets import ImageFolder
 
 from ada_verona.database.dataset.experiment_dataset import ExperimentDataset
 from ada_verona.database.experiment_repository import ExperimentRepository
@@ -85,6 +86,37 @@ class SDPCrownCIFAR10Preprocess:
         return normalized
 
 
+def apply_pytorch_normalization(imgs: torch.Tensor, normalization_type: str) -> torch.Tensor:
+    """
+    Apply PyTorch normalization to images based on normalization type.
+
+    Args:
+        imgs: Image tensor with shape (batch, channels, height, width) or (channels, height, width)
+              Expected to be in [0, 1] range
+        normalization_type: Type of normalization to apply. Options: "none", "sdpcrown"
+
+    Returns:
+        Normalized image tensor
+
+    Raises:
+        ValueError: If normalization_type is not supported
+    """
+    if normalization_type == "sdpcrown":
+        means = torch.tensor([125.3, 123.0, 113.9], device=imgs.device, dtype=imgs.dtype) / 255
+        stds = torch.tensor([0.225, 0.225, 0.225], device=imgs.device, dtype=imgs.dtype)
+        # Handle both batched and unbatched tensors
+        if imgs.dim() == 4:  # (batch, channels, height, width)
+            return (imgs - means.view(1, 3, 1, 1)) / stds.view(1, 3, 1, 1)
+        elif imgs.dim() == 3:  # (channels, height, width)
+            return (imgs - means.view(3, 1, 1)) / stds.view(3, 1, 1)
+        else:
+            raise ValueError(f"Expected 3D or 4D tensor, got {imgs.dim()}D tensor")
+    elif normalization_type == "none":
+        return imgs
+    else:
+        raise ValueError(f"Unsupported normalization_type: {normalization_type}. Must be one of {{'none', 'sdpcrown'}}")
+
+
 def get_dataset_config():
     """
     Get dataset configuration mapping.
@@ -98,7 +130,7 @@ def get_dataset_config():
     return {
         "CIFAR-10": {"class": datasets.CIFAR10, "default_size": (32, 32), "channels": 3, "num_classes": 10},
         "MNIST": {"class": datasets.MNIST, "default_size": (28, 28), "channels": 1, "num_classes": 10},
-        "ImageNet": {"class": datasets.ImageNet, "default_size": (224, 224), "channels": 3, "num_classes": 1000},
+        "ImageNet": {"class": ImageFolder, "default_size": (224, 224), "channels": 3, "num_classes": 1000},
     }
 
 
@@ -161,7 +193,14 @@ def get_balanced_sample(
 
     dataset_class = config["class"]
 
-    torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+    if dataset_name == "ImageNet":
+        split_dir = "train" if train_bool else "val"
+        dataset_path = Path(dataset_dir) / split_dir
+        if not dataset_path.exists():
+            raise FileNotFoundError(f"ImageNet {split_dir} directory not found at {dataset_path}")
+        torch_dataset = dataset_class(root=str(dataset_path), transform=data_transforms)
+    else:
+        torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
 
     # Extract labels
     labels = torch.tensor([torch_dataset[i][1] for i in range(len(torch_dataset))])
@@ -242,7 +281,14 @@ def get_sample(
 
     dataset_class = config["class"]
 
-    torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+    if dataset_name == "ImageNet":
+        split_dir = "train" if train_bool else "val"
+        dataset_path = Path(dataset_dir) / split_dir
+        if not dataset_path.exists():
+            raise FileNotFoundError(f"ImageNet {split_dir} directory not found at {dataset_path}")
+        torch_dataset = dataset_class(root=str(dataset_path), transform=data_transforms)
+    else:
+        torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
 
     dataset_length = len(torch_dataset)
     if dataset_size > dataset_length:
