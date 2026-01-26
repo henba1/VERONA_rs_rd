@@ -1,15 +1,12 @@
 import logging
 import os
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import torch
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from autoverify.verifier import SDPCrown
 
 import ada_verona.util.logger as logger
@@ -32,6 +29,7 @@ from ada_verona import (
     log_classifier_metrics,
     log_verona_experiment_summary,
     log_verona_results,
+    rescale_eps_in_results,
     sdp_crown_models_loading,
 )
 
@@ -53,12 +51,13 @@ def main():
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
-    sample_size = 10
+    sample_size = 300
     random_seed = 5432
 
     use_identity_sampler = False
     sample_correct_predictions = True
     sample_stratified = False
+    sdpcrown_preprocess = True
 
     experiment_name = "sdpcrown_300"
     experiment_tag = experiment_name
@@ -141,7 +140,7 @@ def main():
             dataset_dir=DATASET_DIR,
             seed=random_seed,
             flatten=True,
-            sdpcrown_preprocess=True,
+            sdpcrown_preprocess=sdpcrown_preprocess,
         )
     else:
         cifar10_torch_dataset, original_indices = get_sample(
@@ -151,7 +150,7 @@ def main():
             dataset_dir=DATASET_DIR,
             seed=random_seed,
             flatten=True,
-            sdpcrown_preprocess=True,
+            sdpcrown_preprocess=sdpcrown_preprocess,
         )
     # Pass original_indices to maintain mapping to original dataset
     dataset = PytorchExperimentDataset(dataset=cifar10_torch_dataset, original_indices=original_indices.tolist())
@@ -258,6 +257,10 @@ def main():
         logging.error(f"Error during robustness verification: {e}", exc_info=True)
         raise
     results_path = experiment_repository.get_results_path()
+
+    # If inputs were normalized for SDP-CROWN, rewrite stored eps values accordingly.
+    if sdpcrown_preprocess:
+        rescale_eps_in_results(results_path=results_path, std=0.225)
 
     log_verona_results(comet_tracker, results_path)
     logging.info("Result files contain original dataset indices in the image_id column")

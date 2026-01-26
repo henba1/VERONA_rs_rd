@@ -16,7 +16,6 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
 from torchvision.datasets import ImageFolder
@@ -29,6 +28,8 @@ from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNe
 from ada_verona.dataset_sampler.dataset_sampler import DatasetSampler
 from ada_verona.epsilon_value_estimator.epsilon_value_estimator import EpsilonValueEstimator
 from ada_verona.verification_module.property_generator.property_generator import PropertyGenerator
+
+SDPCROWN_INPUT_STD = 0.225
 
 
 class SDPCrownCIFAR10Preprocess:
@@ -241,6 +242,11 @@ def get_balanced_sample(
     Raises:
         ValueError: If dataset_name is not supported
     """
+    try:
+        from sklearn.model_selection import StratifiedShuffleSplit
+    except ImportError as e:
+        raise ImportError("get_balanced_sample requires scikit-learn.") from e
+
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -724,6 +730,57 @@ def add_original_indices_to_result_df(results_path, original_indices):
     logging.info(f"Saved result_df with original indices to: {output_path}")
 
     return output_path
+
+
+def rescale_eps_in_results(*, results_path: Path, std: float = SDPCROWN_INPUT_STD) -> None:
+    """Rewrite result CSVs so stored eps values are in model-input space.
+
+    When inputs are normalized by dividing by `std` (e.g. CIFAR-10 SDP-CROWN preprocessing),
+    epsilons in *pixel space* must be converted to *model-input space* as:
+
+    \[
+        \epsilon_\text{model} = \epsilon_\text{pixel} / \text{std}.
+    \]
+
+    The rescaled columns overwrite the existing ones, while keeping the originally stored
+    values in `*_raw` columns for traceability.
+    """
+    import pandas as pd
+
+    def _rescale_csv(csv_path: Path, *, epsilon_cols: list[tuple[str, str]]) -> None:
+        if not csv_path.exists():
+            return
+
+        df = pd.read_csv(csv_path, index_col=0)
+        changed = False
+
+        for col, raw_col in epsilon_cols:
+            if col not in df.columns:
+                continue
+            if raw_col not in df.columns:
+                df[raw_col] = df[col]
+                changed = True
+
+            # Idempotent: always recompute from raw.
+            df[col] = df[raw_col] / std
+            changed = True
+
+        if changed:
+            df.to_csv(csv_path)
+
+    _rescale_csv(
+        results_path / "result_df.csv",
+        epsilon_cols=[
+            ("epsilon_value", "epsilon_value_raw"),
+            ("smallest_sat_value", "smallest_sat_value_raw"),
+        ],
+    )
+    _rescale_csv(
+        results_path / "per_epsilon_results.csv",
+        epsilon_cols=[
+            ("epsilon_value", "epsilon_value_raw"),
+        ],
+    )
 
 
 def create_distribution(

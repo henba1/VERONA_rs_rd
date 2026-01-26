@@ -14,9 +14,9 @@ from ada_verona import (
     ExperimentRepository,
     IdentitySampler,
     One2AnyPropertyGenerator,
-    PGDAttack,
     PredictionsBasedSampler,
     PytorchExperimentDataset,
+    RestartingPGDAttack,
     create_distribution,
     create_experiment_directory,
     get_balanced_sample,
@@ -42,25 +42,27 @@ def main():
     start_time = time.time()
 
     # ---------------------------------------BASIC EXPERIMENT CONFIGURATION -----------------------------------------
-    experiment_type = "adv_attack_pgd_linf"
+    experiment_type = "conv_large_vs_conv_large_adv"
     dataset_name = "CIFAR-10"
     input_shape = (1, 3, 32, 32)
     split = "test"
     sample_size = 1000
     random_seed = 5432
-    experiment_tag = experiment_type
-    # If want full dataset, use IdentitySampler, otherwise use PredictionsBasedSampler
+    # Optional prefix used for grouping multiple runs (directory name + Comet tags).
+    # Keep this different from `experiment_type` to avoid duplicated prefixes.
+    experiment_tag = None
+
     use_identity_sampler = False
     sample_correct_predictions = True
     sample_stratified = False
 
     # ----------------------------------------PERTURBATION CONFIGURATION------------------------------------------
     epsilon_start = 0.00
-    epsilon_stop = 0.4
-    epsilon_step = 0.0039
+    epsilon_stop = 5
+    epsilon_step = 0.00784314
     # ----------------------------------------DATASET AND MODELS DIRECTORY CONFIGURATION---------------------------
     DATASET_DIR = get_dataset_dir(dataset_name)
-    MODELS_DIR = get_models_dir(dataset_name) / "sdpcrown_300"
+    MODELS_DIR = get_models_dir(dataset_name) / "conv_large_sdp_compar"
     RESULTS_DIR = get_results_dir()
 
     # --------- -----------------------------COMET ML TRACKING INITIALIZATION --------------------------------
@@ -136,40 +138,44 @@ def main():
     # ----------------------------------------VERIFICATION CONFIGURATION---------------------------------------------
     property_generator = One2AnyPropertyGenerator()
 
-    # PGD-L2 sanity-check defaults: use T=40 steps and a common heuristic α ≈ 2ε/T -> rel_stepsize=2/40=0.05.
-    pgd_iterations = 40
-    # pgd_rel_stepsize = 0.05
-    pgd_random_start = False
+    pgd_iterations = 100
+    pgd_rel_stepsize = 0.03
+    pgd_random_start = True
+    pgd_restarts = 15
     # SDP-CROWN CIFAR-10 preprocessing normalizes by std=0.225 (see `SDPCrownCIFAR10Preprocess`)
     # we pass `std_rescale_factor=0.225` to normalize the epsilon, so epsilons remain in pixel space
     # and are converted inside the attack.
     std_rescale_factor = 0.225
 
     attack_configs = [
-        {
-            "name": "pgd_linf",
-            "attack": PGDAttack(
-                number_iterations=pgd_iterations,
-                rel_stepsize=1.0 / pgd_iterations,
-                randomise=pgd_random_start,
-                norm="inf",
-                std_rescale_factor=std_rescale_factor,
-            ),
-            "attack_type": "PGD",
-            "attack_iterations": pgd_iterations,
-        },
         # {
-        #     "name": "pgd_l2",
+        #     "name": "pgd_l2_single",
         #     "attack": PGDAttack(
         #         number_iterations=pgd_iterations,
         #         rel_stepsize=pgd_rel_stepsize,
         #         randomise=pgd_random_start,
         #         norm="l2",
+        #         bounds=None,
         #         std_rescale_factor=std_rescale_factor,
         #     ),
         #     "attack_type": "PGD",
         #     "attack_iterations": pgd_iterations,
         # },
+        {
+            "name": "pgd_l2",
+            "attack": RestartingPGDAttack(
+                number_iterations=pgd_iterations,
+                n_restarts=pgd_restarts,
+                rel_stepsize=pgd_rel_stepsize,
+                randomise=pgd_random_start,
+                norm="l2",
+                std_rescale_factor=std_rescale_factor,
+                top_k=1,
+                early_stop_on_success=True,
+            ),
+            "attack_type": "PGD",
+            "attack_iterations": pgd_iterations,
+        },
     ]
 
     first_attack_name = attack_configs[0]["name"]
