@@ -59,6 +59,7 @@ from .verification_module.attack_estimation_module import AttackEstimationModule
 from .verification_module.attacks.attack import Attack
 from .verification_module.attacks.fgsm_attack import FGSMAttack
 from .verification_module.attacks.pgd_attack import PGDAttack
+from .verification_module.attacks.pgd_eot_attack import EOTPGDAttack
 from .verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
 )
@@ -118,6 +119,8 @@ try:
     get_balanced_sample = experiment_utils.get_balanced_sample
     get_sample = experiment_utils.get_sample
     get_dataset_config = experiment_utils.get_dataset_config
+    build_torchvision_transforms = experiment_utils.build_torchvision_transforms
+    get_torchvision_dataset = experiment_utils.get_torchvision_dataset
     save_original_indices = experiment_utils.save_original_indices
     load_networks_from_directory = experiment_utils.load_networks_from_directory
     sdp_crown_models_loading = experiment_utils.sdp_crown_models_loading
@@ -140,6 +143,8 @@ except (ImportError, AttributeError):
     get_balanced_sample = None
     get_sample = None
     get_dataset_config = None
+    build_torchvision_transforms = None
+    get_torchvision_dataset = None
     save_original_indices = None
     get_dataset_dir = None
     get_models_dir = None
@@ -187,6 +192,7 @@ __all__ = [
     # Verification module classes
     "AttackEstimationModule",
     "PGDAttack",
+    "EOTPGDAttack",
     "FGSMAttack",
     # Property generator classes
     "One2AnyPropertyGenerator",
@@ -201,6 +207,8 @@ __all__ = [
     "get_balanced_sample",
     "get_sample",
     "get_dataset_config",
+    "build_torchvision_transforms",
+    "get_torchvision_dataset",
     "save_original_indices",
     "get_dataset_dir",
     "get_models_dir",

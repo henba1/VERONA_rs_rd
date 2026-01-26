@@ -2,7 +2,7 @@
 Utility functions for experiment scripts.
 
 This module contains reusable utility functions for setting up and running
-VERONA experiments, including dataset sampling, configuration management,
+VERONA RS-RD experiments, including dataset sampling, configuration management,
 and distribution creation.
 """
 
@@ -70,7 +70,7 @@ class SDPCrownCIFAR10Preprocess:
         Returns:
             Preprocessed image tensor
         """
-        # Ensure we have a tensor
+
         if not isinstance(image, torch.Tensor):
             image = torch.tensor(image, dtype=torch.float32)
 
@@ -134,6 +134,76 @@ def get_dataset_config():
     }
 
 
+def build_torchvision_transforms(
+    *,
+    dataset_name: str,
+    image_size: tuple[int, int] | None = None,
+    flatten: bool = True,
+    sdpcrown_preprocess: bool = False,
+) -> transforms.Compose:
+    """Create torchvision transforms consistent with existing sampling utilities.
+
+    Args:
+        dataset_name: Name of the dataset. Options: "CIFAR-10", "MNIST", "ImageNet"
+        image_size: Optional override for (width, height). If None, uses dataset defaults.
+        flatten: If True, flatten images to 1D tensors. If False, keep images as (C, H, W).
+        sdpcrown_preprocess: If True, apply SDP-CROWN CIFAR-10 preprocessing (only for CIFAR-10).
+    """
+    dataset_config = get_dataset_config()
+    if dataset_name not in dataset_config:
+        raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
+
+    config = dataset_config[dataset_name]
+    target_size = image_size if image_size is not None else config["default_size"]
+
+    transform_list: list[object] = [transforms.Resize(target_size), transforms.ToTensor()]
+
+    if sdpcrown_preprocess and dataset_name == "CIFAR-10":
+        transform_list.append(SDPCrownCIFAR10Preprocess(inception_preprocess=False))
+
+    if flatten:
+        transform_list.append(torch.flatten)
+
+    return transforms.Compose(transform_list)
+
+
+def get_torchvision_dataset(
+    *,
+    dataset_name: str,
+    dataset_dir: str | Path | None,
+    train_bool: bool,
+    image_size: tuple[int, int] | None = None,
+    flatten: bool = True,
+    sdpcrown_preprocess: bool = False,
+):
+    """Return a torchvision dataset with standard preprocessing applied."""
+    dataset_config = get_dataset_config()
+    if dataset_name not in dataset_config:
+        raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
+
+    if dataset_dir is None:
+        raise ValueError("dataset_dir must be provided (it cannot be None).")
+
+    data_transforms = build_torchvision_transforms(
+        dataset_name=dataset_name,
+        image_size=image_size,
+        flatten=flatten,
+        sdpcrown_preprocess=sdpcrown_preprocess,
+    )
+
+    dataset_dir = Path(dataset_dir)
+    dataset_class = dataset_config[dataset_name]["class"]
+
+    if dataset_name == "ImageNet":
+        split_dir = "train" if train_bool else "val"
+        dataset_path = dataset_dir / split_dir
+        if not dataset_path.exists():
+            raise FileNotFoundError(f"ImageNet {split_dir} directory not found at {dataset_path}")
+        return dataset_class(root=str(dataset_path), transform=data_transforms)
+
+    return dataset_class(root=str(dataset_dir), train=train_bool, download=False, transform=data_transforms)
+
+
 def get_balanced_sample(
     dataset_name="CIFAR-10",
     train_bool=True,
@@ -179,28 +249,14 @@ def get_balanced_sample(
     if dataset_name not in dataset_config:
         raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
 
-    config = dataset_config[dataset_name]
-    target_size = image_size if image_size is not None else config["default_size"]
-
-    transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
-
-    if sdpcrown_preprocess and dataset_name == "CIFAR-10":
-        transform_list.append(SDPCrownCIFAR10Preprocess(inception_preprocess=False))
-
-    if flatten:
-        transform_list.append(torch.flatten)
-    data_transforms = transforms.Compose(transform_list)
-
-    dataset_class = config["class"]
-
-    if dataset_name == "ImageNet":
-        split_dir = "train" if train_bool else "val"
-        dataset_path = Path(dataset_dir) / split_dir
-        if not dataset_path.exists():
-            raise FileNotFoundError(f"ImageNet {split_dir} directory not found at {dataset_path}")
-        torch_dataset = dataset_class(root=str(dataset_path), transform=data_transforms)
-    else:
-        torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+    torch_dataset = get_torchvision_dataset(
+        dataset_name=dataset_name,
+        dataset_dir=dataset_dir,
+        train_bool=train_bool,
+        image_size=image_size,
+        flatten=flatten,
+        sdpcrown_preprocess=sdpcrown_preprocess,
+    )
 
     # Extract labels
     labels = torch.tensor([torch_dataset[i][1] for i in range(len(torch_dataset))])
@@ -266,29 +322,14 @@ def get_sample(
     if dataset_name not in dataset_config:
         raise ValueError(f"Unsupported dataset: {dataset_name}. Supported datasets: {', '.join(dataset_config.keys())}")
 
-    config = dataset_config[dataset_name]
-    target_size = image_size if image_size is not None else config["default_size"]
-
-    transform_list = [transforms.Resize(target_size), transforms.ToTensor()]
-
-    # Apply SDP-CROWN preprocessing for CIFAR-10 if requested
-    if sdpcrown_preprocess and dataset_name == "CIFAR-10":
-        transform_list.append(SDPCrownCIFAR10Preprocess(inception_preprocess=False))
-
-    if flatten:
-        transform_list.append(torch.flatten)
-    data_transforms = transforms.Compose(transform_list)
-
-    dataset_class = config["class"]
-
-    if dataset_name == "ImageNet":
-        split_dir = "train" if train_bool else "val"
-        dataset_path = Path(dataset_dir) / split_dir
-        if not dataset_path.exists():
-            raise FileNotFoundError(f"ImageNet {split_dir} directory not found at {dataset_path}")
-        torch_dataset = dataset_class(root=str(dataset_path), transform=data_transforms)
-    else:
-        torch_dataset = dataset_class(root=dataset_dir, train=train_bool, download=False, transform=data_transforms)
+    torch_dataset = get_torchvision_dataset(
+        dataset_name=dataset_name,
+        dataset_dir=dataset_dir,
+        train_bool=train_bool,
+        image_size=image_size,
+        flatten=flatten,
+        sdpcrown_preprocess=sdpcrown_preprocess,
+    )
 
     dataset_length = len(torch_dataset)
     if dataset_size > dataset_length:
@@ -316,9 +357,7 @@ def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], devi
     """
     network_list = []
 
-    # Load ONNX models
     for model_path in sorted(models_dir.glob("*.onnx")):
-        # Check if file exists (handles symlinks correctly)
         if model_path.exists() and (model_path.is_file() or model_path.is_symlink()):
             try:
                 network_list.append(ONNXNetwork(path=model_path))
@@ -326,7 +365,6 @@ def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], devi
             except Exception as e:
                 logging.warning(f"Failed to load ONNX model {model_path.name}: {e}")
 
-    # Load PyTorch models
     for model_path in sorted(models_dir.glob("*.pth")):
         if model_path.exists() and (model_path.is_file() or model_path.is_symlink()):
             try:
@@ -447,7 +485,6 @@ def load_sdpcrown_pytorch_model(model_path: Path, device: torch.device, sdpcrown
     """
     loaded = torch.load(model_path, map_location=device, weights_only=False)
 
-    # Check if loaded object is a state_dict (OrderedDict or dict)
     if isinstance(loaded, (OrderedDict, dict)) and not isinstance(loaded, nn.Module):
         # state_dict, need to instantiate model architecture first
         logging.info(f"Detected state_dict in {model_path.name}, inferring architecture from filename")
