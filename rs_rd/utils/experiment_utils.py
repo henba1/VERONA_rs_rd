@@ -491,7 +491,27 @@ def load_sdpcrown_pytorch_model(model_path: Path, device: torch.device, sdpcrown
         if sdpcrown_models_module is None:
             sdpcrown_models_module = get_sdpcrown_models_module()
         model = infer_sdpcrown_architecture(model_path.stem, sdpcrown_models_module)
-        model.load_state_dict(loaded)
+        state_dict = OrderedDict(loaded)
+
+        # Some checkpoints are saved from models wrapped with `torch.nn.utils.spectral_norm`,
+        # which stores parameters as `*.weight_orig` plus buffers `*.weight_u` and `*.weight_v`.
+        # The SDP-CROWN reference architectures expect plain `*.weight`.
+        if any(k.endswith(".weight_orig") for k in state_dict):
+            logging.info(
+                "Detected SpectralNorm-style state_dict keys in %s; remapping `*.weight_orig -> *.weight`.",
+                model_path.name,
+            )
+            remapped: OrderedDict[str, torch.Tensor] = OrderedDict()
+            for key, value in state_dict.items():
+                if key.endswith(".weight_u") or key.endswith(".weight_v"):
+                    continue
+                if key.endswith(".weight_orig"):
+                    remapped[key[: -len("_orig")]] = value
+                    continue
+                remapped[key] = value
+            state_dict = remapped
+
+        model.load_state_dict(state_dict, strict=True)
     elif isinstance(loaded, nn.Module):
         model = loaded
     else:
