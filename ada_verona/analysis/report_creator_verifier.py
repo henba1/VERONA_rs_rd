@@ -55,6 +55,7 @@ class ReportCreatorVerifier:
             multiple="stack",
             **kwargs,
         )
+        hist_plot.set_xlabel("Epsilon value")
         figure = hist_plot.get_figure()
         plt.close()
         return figure
@@ -69,6 +70,7 @@ class ReportCreatorVerifier:
             y="epsilon_value",
             **kwargs,
         )
+        box_plot.set_ylabel("Epsilon value")
         box_plot.set_xticklabels(box_plot.get_xticklabels(), rotation=90)
         figure = box_plot.get_figure()
         plt.close()
@@ -85,6 +87,7 @@ class ReportCreatorVerifier:
             multiple="stack",
             **kwargs,
         )
+        kde_plot.set_xlabel("Epsilon value")
         figure = kde_plot.get_figure()
         plt.close()
         return figure
@@ -99,6 +102,8 @@ class ReportCreatorVerifier:
             hue="verifier",
             **kwargs,
         )
+        ecdf_plot.set_xlabel("Epsilon value")
+        ecdf_plot.set_ylabel("Fraction epsilon values found")
         figure = ecdf_plot.get_figure()
         plt.close()
         return figure
@@ -116,8 +121,8 @@ class ReportCreatorVerifier:
             plt.plot(verifier_df.epsilon_value, cdf_x, label=verifier, color=color)
             plt.fill_betweenx(cdf_x, verifier_df.epsilon_value, verifier_df.smallest_sat_value, alpha=0.3, color=color)
             plt.xlim(0, 0.35)
-            plt.xlabel("Epsilon values")
-            plt.ylabel("Fraction critical epsilon values found")
+            plt.xlabel("Epsilon value")
+            plt.ylabel("Fraction epsilon values found")
             plt.legend()
 
         return plt.gca()

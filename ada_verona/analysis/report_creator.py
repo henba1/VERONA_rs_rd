@@ -35,6 +35,7 @@ class ReportCreator:
         if self.custom_colors is not None:
             kwargs["palette"] = self.custom_colors
         hist_plot = sns.histplot(data=self.df, x="epsilon_value", hue="network", multiple="stack", **kwargs)
+        hist_plot.set_xlabel("Epsilon value")
         figure = hist_plot.get_figure()
 
         plt.close()
@@ -46,6 +47,7 @@ class ReportCreator:
         if self.custom_colors is not None:
             kwargs["palette"] = self.custom_colors
         box_plot = sns.boxplot(data=self.df, x="network", y="epsilon_value", **kwargs)
+        box_plot.set_ylabel("Epsilon value")
         box_plot.set_xticklabels(box_plot.get_xticklabels(), rotation=90)
 
         figure = box_plot.get_figure()
@@ -59,6 +61,7 @@ class ReportCreator:
         if self.custom_colors is not None:
             kwargs["palette"] = self.custom_colors
         kde_plot = sns.kdeplot(data=self.df, x="epsilon_value", hue="network", multiple="stack", **kwargs)
+        kde_plot.set_xlabel("Epsilon value")
 
         figure = kde_plot.get_figure()
 
@@ -71,6 +74,8 @@ class ReportCreator:
         if self.custom_colors is not None:
             kwargs["palette"] = self.custom_colors
         ecdf_plot = sns.ecdfplot(data=self.df, x="epsilon_value", hue="network", **kwargs)
+        ecdf_plot.set_xlabel("Epsilon value")
+        ecdf_plot.set_ylabel("Fraction epsilon values found")
 
         figure = ecdf_plot.get_figure()
 
@@ -90,8 +95,8 @@ class ReportCreator:
             plt.plot(network_df.epsilon_value, cdf_x, label=network, color=color)
             plt.fill_betweenx(cdf_x, network_df.epsilon_value, network_df.smallest_sat_value, alpha=0.3, color=color)
             plt.xlim(0, 4)
-            plt.xlabel("Epsilon values")
-            plt.ylabel("Fraction critical epsilon values found")
+            plt.xlabel("Epsilon value")
+            plt.ylabel("Fraction epsilon values found")
             plt.legend()
 
         return plt.gca()
