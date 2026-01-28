@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Patch
 
 matplotlib.use("Agg")
 sns.set_style("darkgrid")
@@ -152,13 +153,20 @@ def create_paired_ecdf_plot(
     if custom_colors:
         colors.update(custom_colors)
 
+    rs_color = colors.get(rs_verifier)
+    eotpgd_color = colors.get("EOTPGD")
+
     fig, ax = plt.subplots(figsize=(10, 7))
-    ax.plot(lb, y, color=colors.get(rs_verifier), linewidth=1.8, label=rs_verifier)
-    ax.hlines(y, lb, ub, color=colors.get("EOTPGD"), alpha=0.35, linewidth=2.5, label="_nolegend_")
+    ax.hlines(y, lb, ub, color=eotpgd_color, alpha=0.35, linewidth=2.5, zorder=1)
+    ax.plot(lb, y, color=rs_color, linewidth=1.8, zorder=2)
     ax.set_xlabel("Epsilon value")
     ax.set_ylabel("Fraction epsilon values found")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=10)
+    handles = [
+        Patch(facecolor=rs_color, edgecolor="none", label=rs_verifier),
+        Patch(facecolor=eotpgd_color, edgecolor="none", label="EOTPGD"),
+    ]
+    ax.legend(handles=handles, fontsize=10, handlelength=1, handleheight=1)
     plt.tight_layout()
 
     output_dir = Path(output_dir)
@@ -167,6 +175,10 @@ def create_paired_ecdf_plot(
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return out_path
+
+
+# Backwards-compatible alias used by older shims.
+create_paired_comparison_plot = create_paired_ecdf_plot
 
 
 def plot_rs_eotpgd(

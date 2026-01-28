@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Patch
 
 matplotlib.use("Agg")
 sns.set_style("darkgrid")
@@ -148,6 +149,7 @@ def generate_4_compar_plots(
     plot_paths: dict[str, Path] = {"inputs": output_dir / "inputs.txt"}
 
     hist_ax = sns.histplot(data=plot_df, x="epsilon_value", hue="verifier", multiple="stack", palette=color_map)
+    hist_ax.set_xlabel("Epsilon value")
     hist_fig = hist_ax.get_figure()
     hist_path = output_dir / f"{base}_histogram.png"
     _save_fig(hist_fig, hist_path)
@@ -161,12 +163,15 @@ def generate_4_compar_plots(
     plot_paths["boxplot"] = box_path
 
     kde_ax = sns.kdeplot(data=plot_df, x="epsilon_value", hue="verifier", multiple="stack", palette=color_map)
+    kde_ax.set_xlabel("Epsilon value")
     kde_fig = kde_ax.get_figure()
     kde_path = output_dir / f"{base}_kde.png"
     _save_fig(kde_fig, kde_path)
     plot_paths["kde"] = kde_path
 
     ecdf_ax = sns.ecdfplot(data=plot_df, x="epsilon_value", hue="verifier", palette=color_map)
+    ecdf_ax.set_xlabel("Epsilon value")
+    ecdf_ax.set_ylabel("Fraction epsilon values found")
     ecdf_fig = ecdf_ax.get_figure()
     ecdf_path = output_dir / f"{base}_ecdf.png"
     _save_fig(ecdf_fig, ecdf_path)
@@ -227,52 +232,73 @@ def generate_4_compar_plots(
         df2_pair["ub"] = pd.to_numeric(df2_pair["ub"], errors="coerce")
         df2_pair = df2_pair.dropna(subset=["lb", "ub"]).sort_values("lb").reset_index(drop=True)
 
-        df1_label = f"{df1_lb_verifier} vs {df1_ub_verifier}"
-        df2_label = "RS vs EOTPGD"
+        df2_lb_label = _extract_df2_lb_label(str(df2["network"].iloc[0])) if "network" in df2.columns else "RS"
+        df2_ub_label = f"{config.df2_ub_prefix}_{_as_int_if_possible(df2['search_num_iter'].mode().iloc[0])}"
 
-        def _save_pair_gap(path: Path, pair_df: pd.DataFrame, lb_color: str, gap_color: str, label: str) -> None:
+        df1_label = df1_lb_verifier
+        df1_label_ub = df1_ub_verifier
+        df2_label = df2_lb_label
+        df2_label_ub = df2_ub_label
+
+        def _save_pair_gap(
+            path: Path,
+            pair_df: pd.DataFrame,
+            lb_color: str,
+            ub_color: str,
+            lb_name: str,
+            ub_name: str,
+        ) -> None:
             fig, ax = plt.subplots(figsize=(8, 6))
             n = len(pair_df)
             y = np.zeros(n) if n <= 1 else np.linspace(0, 1, n)
             lb = pair_df["lb"].to_numpy()
             ub = pair_df["ub"].to_numpy()
 
-            ax.plot(lb, y, color=lb_color, linewidth=1.8, label=label)
-            ax.hlines(y, lb, ub, color=gap_color, alpha=0.35, linewidth=2.5, label="_nolegend_")
+            ax.hlines(y, lb, ub, color=ub_color, alpha=0.35, linewidth=2.5, zorder=1)
+            ax.plot(lb, y, color=lb_color, linewidth=1.8, zorder=2)
             ax.set_xlabel("Epsilon value")
             ax.set_ylabel("Fraction epsilon values found")
             ax.grid(True, alpha=0.3)
-            ax.legend(fontsize=10)
+            handles = [
+                Patch(facecolor=lb_color, edgecolor="none", label=lb_name),
+                Patch(facecolor=ub_color, edgecolor="none", label=ub_name),
+            ]
+            ax.legend(handles=handles, fontsize=10, handlelength=1, handleheight=1)
             plt.tight_layout()
             _save_fig(fig, path)
 
-        # Individual pair plots (still produced)
         df1_gap_path = output_dir / f"{base}_pair_gap_cdf_df1.png"
-        _save_pair_gap(df1_gap_path, df1_pair, blue, light_blue, df1_label)
+        _save_pair_gap(df1_gap_path, df1_pair, blue, light_blue, df1_label, df1_label_ub)
         plot_paths["pair_gap_cdf_df1"] = df1_gap_path
 
         df2_gap_path = output_dir / f"{base}_pair_gap_cdf_df2.png"
-        _save_pair_gap(df2_gap_path, df2_pair, violet, light_violet, df2_label)
+        _save_pair_gap(df2_gap_path, df2_pair, violet, light_violet, df2_label, df2_label_ub)
         plot_paths["pair_gap_cdf_df2"] = df2_gap_path
 
         # Combined plot: both pairs on one axes
         fig, ax = plt.subplots(figsize=(10, 7))
-        for pair_df, lb_color, gap_color, label in [
-            (df1_pair, blue, light_blue, df1_label),
-            (df2_pair, violet, light_violet, df2_label),
+        for pair_df, lb_color, ub_color in [
+            (df1_pair, blue, light_blue),
+            (df2_pair, violet, light_violet),
         ]:
             n = len(pair_df)
             y = np.zeros(n) if n <= 1 else np.linspace(0, 1, n)
             lb = pair_df["lb"].to_numpy()
             ub = pair_df["ub"].to_numpy()
 
-            ax.plot(lb, y, color=lb_color, linewidth=1.8, label=label)
-            ax.hlines(y, lb, ub, color=gap_color, alpha=0.28, linewidth=2.0, label="_nolegend_")
+            ax.hlines(y, lb, ub, color=ub_color, alpha=0.28, linewidth=2.0, zorder=1)
+            ax.plot(lb, y, color=lb_color, linewidth=1.8, zorder=2)
 
         ax.set_xlabel("Epsilon value")
         ax.set_ylabel("Fraction epsilon values found")
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=10)
+        handles = [
+            Patch(facecolor=blue, edgecolor="none", label=df1_label),
+            Patch(facecolor=light_blue, edgecolor="none", label=df1_label_ub),
+            Patch(facecolor=violet, edgecolor="none", label=df2_label),
+            Patch(facecolor=light_violet, edgecolor="none", label=df2_label_ub),
+        ]
+        ax.legend(handles=handles, fontsize=10, handlelength=1, handleheight=1)
         plt.tight_layout()
 
         pair_gap_path = output_dir / f"{base}_pair_gap_cdf.png"
