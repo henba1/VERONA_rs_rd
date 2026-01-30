@@ -75,7 +75,7 @@ class ReportCreator:
             kwargs["palette"] = self.custom_colors
         ecdf_plot = sns.ecdfplot(data=self.df, x="epsilon_value", hue="network", **kwargs)
         ecdf_plot.set_xlabel("Epsilon value")
-        ecdf_plot.set_ylabel("Fraction epsilon values found")
+        ecdf_plot.set_ylabel("Fraction critical epsilon values found")
 
         figure = ecdf_plot.get_figure()
 
@@ -96,7 +96,7 @@ class ReportCreator:
             plt.fill_betweenx(cdf_x, network_df.epsilon_value, network_df.smallest_sat_value, alpha=0.3, color=color)
             plt.xlim(0, 4)
             plt.xlabel("Epsilon value")
-            plt.ylabel("Fraction epsilon values found")
+            plt.ylabel("Fraction critical epsilon values found")
             plt.legend()
 
         return plt.gca()

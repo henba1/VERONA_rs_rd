@@ -103,7 +103,7 @@ class ReportCreatorVerifier:
             **kwargs,
         )
         ecdf_plot.set_xlabel("Epsilon value")
-        ecdf_plot.set_ylabel("Fraction epsilon values found")
+        ecdf_plot.set_ylabel("Fraction critical epsilon values found")
         figure = ecdf_plot.get_figure()
         plt.close()
         return figure
@@ -122,7 +122,7 @@ class ReportCreatorVerifier:
             plt.fill_betweenx(cdf_x, verifier_df.epsilon_value, verifier_df.smallest_sat_value, alpha=0.3, color=color)
             plt.xlim(0, 0.35)
             plt.xlabel("Epsilon value")
-            plt.ylabel("Fraction epsilon values found")
+            plt.ylabel("Fraction critical epsilon values found")
             plt.legend()
 
         return plt.gca()
