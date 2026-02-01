@@ -29,18 +29,8 @@ def _paired_violet_colors() -> tuple[str, str]:
     return violet, light_violet
 
 
-def extract_model_name(network_str: str) -> str:
-    parts = str(network_str).split("_")
-    if len(parts) >= 2 and parts[0] == "RS":
-        model_name = parts[1]
-        return "conv_large" if model_name == "convlarge" else model_name
-
-    match = re.match(r"RS_([^_]+)", str(network_str))
-    if match:
-        model_name = match.group(1)
-        return "conv_large" if model_name == "convlarge" else model_name
-
-    return "unknown_model"
+def _band_fill_color() -> str:
+    return "#707070"
 
 
 def extract_sigma(network_str: str) -> float | None:
@@ -336,9 +326,7 @@ def plot_r_uncertainty_band_by_tag(
         )
 
     network_str = str(run_records[0]["network"])
-    model_name = extract_model_name(network_str)
     sigma = extract_sigma(network_str)
-
     id_sets = [set(r["df"]["image_id"].tolist()) for r in run_records]
     common_ids = set.intersection(*id_sets) if id_sets else set()
     if not common_ids:
@@ -403,27 +391,20 @@ def plot_r_uncertainty_band_by_tag(
     )
 
     fig, ax = plt.subplots(figsize=(10, 7))
-    median_color, band_color = _paired_violet_colors()
-    ax.fill_between(eps_grid, f_lo, f_hi, step="pre", alpha=0.25, color=band_color, linewidth=0)
-    ax.step(eps_grid, f_med, where="pre", color=median_color, alpha=0.9, linewidth=1)
+    median_color = _paired_violet_colors()[0]
+    band_color = _band_fill_color()
+    ax.fill_between(eps_grid, f_lo, f_hi, step="pre", alpha=0.45, color=band_color, linewidth=0, label="10-90% band")
+    ax.step(eps_grid, f_med, where="pre", color=median_color, alpha=1.0, linewidth=0.4, label="Median ECDF")
 
-    if sigma is None:
-        label = model_name
-        title = f"ECDF uncertainty band ({model_name})"
-    else:
-        label = f"{model_name} (σ={sigma:g})"
-        title = f"ECDF uncertainty band ({model_name}, σ={sigma:g})"
-
-    ax.set_title(title)
-    ax.set_xlabel("Certified radius (epsilon_value)")
-    ax.set_ylabel("ECDF")
+    ax.set_xlabel("Epsilon value")
+    ax.set_ylabel("Fraction critical epsilon values found")
     ax.set_xlim(0, max(0.1, float(eps_grid.max()) * 1.05))
     ax.set_ylim(0.0, 1.0)
     ax.grid(True, alpha=0.3)
-    ax.legend([label], loc="lower right")
+    ax.legend(loc="lower right")
     plt.tight_layout()
 
-    out_plot = tag_out_dir / f"ecdf_band_{_sanitize_filename(model_name)}.png"
+    out_plot = tag_out_dir / f"ecdf_band_{sigma}.png"
     fig.savefig(out_plot, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
