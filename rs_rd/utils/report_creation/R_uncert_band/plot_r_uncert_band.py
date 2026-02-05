@@ -19,7 +19,7 @@ sns.set_style("darkgrid")
 logger = logging.getLogger(__name__)
 
 DEFAULT_RESULTS_DIR = get_results_dir("CIFAR-10")
-DEFAULT_OUTPUT_DIR = Path("/gpfs/work2/0/prjs1681/runs/results/figures/0_R_uncert_band")
+DEFAULT_OUTPUT_DIR = Path("/gpfs/work2/0/prjs1681/runs/results/figures/0_R_uncert_band/min_runs_5")
 DEFAULT_K = 10
 
 
@@ -93,6 +93,14 @@ def _presence_report_by_id(id_sets_by_seed: dict[int, set[int]]) -> dict:
     }
 
 
+def _ids_present_in_at_least_n_runs(id_sets: list[set[int]], min_runs: int) -> set[int]:
+    """Return image_ids that appear with certified radii in at least min_runs runs."""
+    if not id_sets or min_runs <= 0:
+        return set()
+    union = set().union(*id_sets)
+    return {id for id in union if sum(1 for s in id_sets if id in s) >= min_runs}
+
+
 def _presence_report_by_run(id_sets_by_run: dict[str, set[int]]) -> dict:
     run_keys = sorted(id_sets_by_run.keys())
     sets = [id_sets_by_run[k] for k in run_keys]
@@ -143,6 +151,7 @@ def write_run_differences_report(
     output_dir: Path,
     experiment_tag: str,
     n_common_result_ids: int,
+    min_runs: int = DEFAULT_K,
 ) -> Path:
     abstained_by_run: dict[str, set[int]] = {}
     misclassified_by_run: dict[str, set[int]] = {}
@@ -189,7 +198,8 @@ def write_run_differences_report(
 
     result_ids_by_run = {r["run"]: set(r["result_ids_raw"]) for r in run_records}
     result_presence = _presence_report_by_run(result_ids_by_run)
-    common_raw = set.intersection(*result_ids_by_run.values()) if result_ids_by_run else set()
+    id_sets_list = list(result_ids_by_run.values())
+    common_raw = _ids_present_in_at_least_n_runs(id_sets_list, min_runs)
     dropped_from_result_df_by_run = {k: sorted(v - common_raw) for k, v in result_ids_by_run.items()}
 
     abstained_report = _presence_report_by_run(abstained_by_run)
@@ -282,6 +292,7 @@ def plot_r_uncertainty_band_by_tag(
     dataset_dir: Path = DEFAULT_RESULTS_DIR,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     expected_k: int = DEFAULT_K,
+    min_runs: int = 5,
 ) -> dict[str, Path]:
     prefix = f"{experiment_tag}_"
     exp_dirs = sorted([p for p in dataset_dir.iterdir() if p.is_dir() and p.name.startswith(prefix)])
@@ -328,15 +339,17 @@ def plot_r_uncertainty_band_by_tag(
     network_str = str(run_records[0]["network"])
     sigma = extract_sigma(network_str)
     id_sets = [set(r["df"]["image_id"].tolist()) for r in run_records]
-    common_ids = set.intersection(*id_sets) if id_sets else set()
+    common_ids = _ids_present_in_at_least_n_runs(id_sets, min_runs)
     if not common_ids:
-        raise ValueError("No common image_id values across runs")
+        raise ValueError(f"No image_ids with certified radii in >= {min_runs} runs (found {len(id_sets)} runs)")
 
     per_run_n_total = [len(r["df"]) for r in run_records]
     n_common = len(common_ids)
     if len(set(per_run_n_total + [n_common])) != 1:
         logger.warning(
-            "Runs have differing numbers of radii; using intersection of image_id across runs (%d samples)", n_common
+            "Runs have differing numbers of radii; using image_ids present in >= %d runs (%d samples)",
+            min_runs,
+            n_common,
         )
 
     for r in run_records:
@@ -370,6 +383,7 @@ def plot_r_uncertainty_band_by_tag(
         f"experiment_tag={experiment_tag}",
         f"dataset_dir={dataset_dir}",
         f"expected_k={expected_k}",
+        f"min_runs={min_runs}",
         f"n_common_image_ids={n_common}",
         "",
     ]
@@ -388,16 +402,19 @@ def plot_r_uncertainty_band_by_tag(
         output_dir=tag_out_dir,
         experiment_tag=experiment_tag,
         n_common_result_ids=n_common,
+        min_runs=min_runs,
     )
 
     fig, ax = plt.subplots(figsize=(10, 7))
     median_color = _paired_violet_colors()[0]
     band_color = _band_fill_color()
     ax.fill_between(eps_grid, f_lo, f_hi, step="pre", alpha=0.45, color=band_color, linewidth=0, label="10-90% band")
-    ax.step(eps_grid, f_med, where="pre", color=median_color, alpha=1.0, linewidth=0.4, label="Median ECDF")
+    ax.step(
+        eps_grid, f_med, where="pre", color=median_color, alpha=1.0, linewidth=0.4, label=f"Median ECDF ({network_str})"
+    )
 
     ax.set_xlabel("Epsilon value")
-    ax.set_ylabel("Fraction critical epsilon values found")
+    ax.set_ylabel("Fraction epsilon values found")
     ax.set_xlim(0, max(0.1, float(eps_grid.max()) * 1.05))
     ax.set_ylim(0.0, 1.0)
     ax.grid(True, alpha=0.3)
