@@ -349,6 +349,57 @@ def get_sample(
     return sampled_dataset, sample_idx
 
 
+def get_first_n(
+    *,
+    dataset_name: str,
+    train_bool: bool,
+    n: int,
+    dataset_dir: str | Path | None,
+    image_size: tuple[int, int] | None = None,
+    flatten: bool = True,
+    sdpcrown_preprocess: bool = False,
+):
+    """
+    Get the first N instances from a PyTorch dataset in order (no random sampling).
+
+    Supports CIFAR-10, MNIST, and ImageNet datasets. Returns indices 0..n-1.
+
+    Args:
+        dataset_name: Name of the dataset. Options: "CIFAR-10", "MNIST", "ImageNet"
+        train_bool: If True, use training set; if False, use test/val set
+        n: Number of samples to take from the start
+        dataset_dir: Directory where dataset is stored
+        image_size: Target image size (width, height). If None, uses dataset defaults
+        flatten: If True, flatten images to 1D tensors. If False, keep as (C, H, W)
+        sdpcrown_preprocess: If True, applies SDP-CROWN preprocessing for CIFAR-10
+
+    Returns:
+        tuple: (subset_dataset, original_indices)
+            - subset_dataset: PyTorch Subset with first n samples
+            - original_indices: ndarray of indices [0, 1, ..., n-1]
+    """
+    dataset_config = get_dataset_config()
+    if dataset_name not in dataset_config:
+        raise ValueError(f"Unsupported dataset: {dataset_name}. Supported: {', '.join(dataset_config.keys())}")
+
+    torch_dataset = get_torchvision_dataset(
+        dataset_name=dataset_name,
+        dataset_dir=dataset_dir,
+        train_bool=train_bool,
+        image_size=image_size,
+        flatten=flatten,
+        sdpcrown_preprocess=sdpcrown_preprocess,
+    )
+
+    dataset_length = len(torch_dataset)
+    if n > dataset_length:
+        raise ValueError(f"Requested n={n} exceeds dataset size {dataset_length}")
+
+    original_indices = np.arange(n)
+    subset_dataset = Subset(torch_dataset, original_indices)
+    return subset_dataset, original_indices
+
+
 def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], device: torch.device) -> list[Network]:
     """
     Load networks from a directory supporting both ONNX and PyTorch (.pth) models.
@@ -390,6 +441,118 @@ def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], devi
             except Exception as e:
                 logging.warning(f"Failed to load PyTorch model {model_path.name}: {e}")
 
+    return network_list
+
+
+class HuggingFacePreprocessWrapper(nn.Module):
+    """
+    Wraps a HuggingFace image classification model with [0,1] -> [-1,1] preprocessing.
+
+    Matches drm_base: inputs from dataset (ToTensor, [0,1]) are scaled 2*x - 1
+    before being passed to the model. Returns model.logits.
+    """
+
+    def __init__(self, model: nn.Module) -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = 2.0 * x - 1.0
+        out = self.model(x)
+        return out.logits
+
+
+class TimmPreprocessWrapper(nn.Module):
+    """
+    Wraps a timm image classification model with [0,1] -> [-1,1] preprocessing.
+
+    Timm models output logits directly (no .logits attribute). Scale matches drm_base.
+    """
+
+    def __init__(self, model: nn.Module) -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = 2.0 * x - 1.0
+        return self.model(x)
+
+
+def load_huggingface_classifier_networks(
+    *,
+    model_ids: list[str],
+    input_shape: tuple[int, ...],
+    device: torch.device,
+) -> list[PyTorchNetwork]:
+    """
+    Load HuggingFace image classification models and wrap them for VERONA.
+
+    Models use preprocessing [0,1] -> [-1,1] inside the wrapper. Dataset should
+    provide [0,1] images (ToTensor). Returns PyTorchNetwork instances.
+    """
+    try:
+        from transformers import AutoModelForImageClassification
+    except ImportError as e:
+        raise ImportError("transformers is required for load_huggingface_classifier_networks") from e
+
+    network_list: list[PyTorchNetwork] = []
+    for model_id in model_ids:
+        try:
+            model = AutoModelForImageClassification.from_pretrained(model_id)
+            model = model.to(device)
+            model.eval()
+            wrapped = HuggingFacePreprocessWrapper(model)
+            name = model_id.replace("/", "_")
+            network_list.append(
+                PyTorchNetwork(
+                    model=wrapped,
+                    input_shape=input_shape,
+                    name=name,
+                    path=None,
+                )
+            )
+            logging.info(f"Loaded HuggingFace model: {model_id}")
+        except Exception as e:
+            logging.warning(f"Failed to load HuggingFace model {model_id}: {e}")
+    return network_list
+
+
+def load_timm_classifier_networks(
+    *,
+    model_names: list[str],
+    input_shape: tuple[int, ...],
+    device: torch.device,
+) -> list[PyTorchNetwork]:
+    """
+    Load timm image classification models and wrap them for VERONA.
+
+    Models use preprocessing [0,1] -> [-1,1] inside the wrapper. Dataset should
+    provide [0,1] images (ToTensor). Returns PyTorchNetwork instances.
+    """
+    try:
+        import timm
+    except ImportError as e:
+        raise ImportError("timm is required for load_timm_classifier_networks") from e
+
+    network_list: list[PyTorchNetwork] = []
+    for model_name in model_names:
+        try:
+            model = timm.create_model(model_name, pretrained=True)
+            model = model.to(device)
+            model.eval()
+            wrapped = TimmPreprocessWrapper(model)
+            name = model_name.replace("/", "_")
+            network_list.append(
+                PyTorchNetwork(
+                    model=wrapped,
+                    input_shape=input_shape,
+                    name=name,
+                    path=None,
+                )
+            )
+            logging.info(f"Loaded timm model: {model_name}")
+        except Exception as e:
+            logging.warning(f"Failed to load timm model {model_name}: {e}")
     return network_list
 
 

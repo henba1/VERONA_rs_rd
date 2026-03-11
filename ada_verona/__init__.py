@@ -59,7 +59,7 @@ from .verification_module.attack_estimation_module import AttackEstimationModule
 from .verification_module.attacks.attack import Attack
 from .verification_module.attacks.fgsm_attack import FGSMAttack
 from .verification_module.attacks.pgd_attack import PGDAttack
-from .verification_module.attacks.pgd_eot_attack import EOTPGDAttack
+from .verification_module.attacks.smoothadv_attack import SmoothAdvAttack as SmoothAdvAttack
 from .verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
 )
@@ -117,7 +117,10 @@ try:
     create_distribution = experiment_utils.create_distribution
     create_experiment_directory = experiment_utils.create_experiment_directory
     get_balanced_sample = experiment_utils.get_balanced_sample
+    get_first_n = experiment_utils.get_first_n
     get_sample = experiment_utils.get_sample
+    load_huggingface_classifier_networks = experiment_utils.load_huggingface_classifier_networks
+    load_timm_classifier_networks = experiment_utils.load_timm_classifier_networks
     get_dataset_config = experiment_utils.get_dataset_config
     build_torchvision_transforms = experiment_utils.build_torchvision_transforms
     get_torchvision_dataset = experiment_utils.get_torchvision_dataset
@@ -141,7 +144,10 @@ except (ImportError, AttributeError):
     create_distribution = None
     create_experiment_directory = None
     get_balanced_sample = None
+    get_first_n = None
     get_sample = None
+    load_huggingface_classifier_networks = None
+    load_timm_classifier_networks = None
     get_dataset_config = None
     build_torchvision_transforms = None
     get_torchvision_dataset = None
@@ -205,7 +211,10 @@ __all__ = [
     "create_distribution",
     "create_experiment_directory",
     "get_balanced_sample",
+    "get_first_n",
     "get_sample",
+    "load_huggingface_classifier_networks",
+    "load_timm_classifier_networks",
     "get_dataset_config",
     "build_torchvision_transforms",
     "get_torchvision_dataset",
