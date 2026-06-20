@@ -59,6 +59,7 @@ from .verification_module.attack_estimation_module import AttackEstimationModule
 from .verification_module.attacks.attack import Attack
 from .verification_module.attacks.fgsm_attack import FGSMAttack
 from .verification_module.attacks.pgd_attack import PGDAttack
+from .verification_module.attacks.restarting_pgd_attack import RestartingPGDAttack
 from .verification_module.attacks.smoothadv_attack import SmoothAdvAttack as SmoothAdvAttack
 from .verification_module.property_generator.one2any_property_generator import (
     One2AnyPropertyGenerator,
@@ -107,7 +108,7 @@ try:
         sys.path.insert(0, str(_ada_verona_path))
 
     # Import rs_rd utilities
-    from rs_rd.utils import comet_tracker, experiment_utils, paths
+    from rs_rd.utils import comet_tracker, experiment_utils, model_preprocessing, paths
 
     CometTracker = comet_tracker.CometTracker
     log_classifier_metrics = comet_tracker.log_classifier_metrics
@@ -129,6 +130,10 @@ try:
     sdp_crown_models_loading = experiment_utils.sdp_crown_models_loading
     load_sdpcrown_pytorch_model = experiment_utils.load_sdpcrown_pytorch_model
     apply_pytorch_normalization = experiment_utils.apply_pytorch_normalization
+    rescale_eps_in_results = experiment_utils.rescale_eps_in_results
+
+    PreprocSpec = model_preprocessing.PreprocSpec
+    resolve_preproc_spec = model_preprocessing.resolve_preproc_spec
 
     get_dataset_dir = paths.get_dataset_dir
     get_models_dir = paths.get_models_dir
@@ -159,6 +164,9 @@ except (ImportError, AttributeError):
     sdp_crown_models_loading = None
     load_sdpcrown_pytorch_model = None
     apply_pytorch_normalization = None
+    rescale_eps_in_results = None
+    PreprocSpec = None
+    resolve_preproc_spec = None
 
 
 __all__ = [
@@ -198,6 +206,7 @@ __all__ = [
     # Verification module classes
     "AttackEstimationModule",
     "PGDAttack",
+    "RestartingPGDAttack",
     "EOTPGDAttack",
     "FGSMAttack",
     # Property generator classes
@@ -226,6 +235,9 @@ __all__ = [
     "sdp_crown_models_loading",
     "load_sdpcrown_pytorch_model",
     "apply_pytorch_normalization",
+    "rescale_eps_in_results",
+    "PreprocSpec",
+    "resolve_preproc_spec",
 ]
 
 

@@ -28,6 +28,12 @@ from ada_verona.database.machine_learning_model.pytorch_network import PyTorchNe
 from ada_verona.dataset_sampler.dataset_sampler import DatasetSampler
 from ada_verona.epsilon_value_estimator.epsilon_value_estimator import EpsilonValueEstimator
 from ada_verona.verification_module.property_generator.property_generator import PropertyGenerator
+from rs_rd.utils.model_preprocessing import (
+    SDPCROWN_MEAN,
+    SDPCROWN_STD,
+    normalize,
+    resolve_preproc_spec,
+)
 
 SDPCROWN_INPUT_STD = 0.225
 
@@ -103,15 +109,9 @@ def apply_pytorch_normalization(imgs: torch.Tensor, normalization_type: str) -> 
         ValueError: If normalization_type is not supported
     """
     if normalization_type == "sdpcrown":
-        means = torch.tensor([125.3, 123.0, 113.9], device=imgs.device, dtype=imgs.dtype) / 255
-        stds = torch.tensor([0.225, 0.225, 0.225], device=imgs.device, dtype=imgs.dtype)
-        # Handle both batched and unbatched tensors
-        if imgs.dim() == 4:  # (batch, channels, height, width)
-            return (imgs - means.view(1, 3, 1, 1)) / stds.view(1, 3, 1, 1)
-        elif imgs.dim() == 3:  # (channels, height, width)
-            return (imgs - means.view(3, 1, 1)) / stds.view(3, 1, 1)
-        else:
+        if imgs.dim() not in (3, 4):
             raise ValueError(f"Expected 3D or 4D tensor, got {imgs.dim()}D tensor")
+        return normalize(imgs, SDPCROWN_MEAN, SDPCROWN_STD)
     elif normalization_type == "none":
         return imgs
     else:
@@ -446,36 +446,39 @@ def load_networks_from_directory(models_dir: Path, input_shape: tuple[int], devi
 
 class HuggingFacePreprocessWrapper(nn.Module):
     """
-    Wraps a HuggingFace image classification model with [0,1] -> [-1,1] preprocessing.
+    Wraps a HuggingFace image classification model with per-model normalization.
 
-    Matches drm_base: inputs from dataset (ToTensor, [0,1]) are scaled 2*x - 1
-    before being passed to the model. Returns model.logits.
+    Inputs from the dataset (ToTensor, [0,1]) are normalized via the model's resolved
+    PreprocSpec (mean/std from AutoImageProcessor) before the forward pass. The dataset
+    is expected to already provide images at the model's input size, so no resize is
+    applied here. Returns model.logits.
     """
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: nn.Module, spec) -> None:
         super().__init__()
         self.model = model
+        self.spec = spec
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = 2.0 * x - 1.0
-        out = self.model(x)
+        out = self.model(self.spec.normalize(x))
         return out.logits
 
 
 class TimmPreprocessWrapper(nn.Module):
     """
-    Wraps a timm image classification model with [0,1] -> [-1,1] preprocessing.
+    Wraps a timm image classification model with per-model normalization.
 
-    Timm models output logits directly (no .logits attribute). Scale matches drm_base.
+    Inputs in [0,1] are normalized via the model's resolved PreprocSpec (mean/std from
+    timm's pretrained_cfg). Timm models output logits directly (no .logits attribute).
     """
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: nn.Module, spec) -> None:
         super().__init__()
         self.model = model
+        self.spec = spec
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = 2.0 * x - 1.0
-        return self.model(x)
+        return self.model(self.spec.normalize(x))
 
 
 def load_huggingface_classifier_networks(
@@ -501,7 +504,8 @@ def load_huggingface_classifier_networks(
             model = AutoModelForImageClassification.from_pretrained(model_id)
             model = model.to(device)
             model.eval()
-            wrapped = HuggingFacePreprocessWrapper(model)
+            spec = resolve_preproc_spec(model, "huggingface", model_id)
+            wrapped = HuggingFacePreprocessWrapper(model, spec)
             name = model_id.replace("/", "_")
             network_list.append(
                 PyTorchNetwork(
@@ -540,7 +544,8 @@ def load_timm_classifier_networks(
             model = timm.create_model(model_name, pretrained=True)
             model = model.to(device)
             model.eval()
-            wrapped = TimmPreprocessWrapper(model)
+            spec = resolve_preproc_spec(model, "timm", model_name)
+            wrapped = TimmPreprocessWrapper(model, spec)
             name = model_name.replace("/", "_")
             network_list.append(
                 PyTorchNetwork(
